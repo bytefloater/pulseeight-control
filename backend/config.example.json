@@ -1,0 +1,8 @@
+{
+  "host": "192.168.1.150",
+  "port": 80,
+  "timeout": 10,
+  "poll_interval": 5,
+  "detail_poll_interval": 20,
+  "admin_password": null
+}

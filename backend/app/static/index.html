@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PulseEight Control</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <script>
+    (function () {
+      var stored = localStorage.getItem("pulseeight-theme") || "system";
+      var effective = stored === "system"
+        ? (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
+        : stored;
+      document.documentElement.setAttribute("data-theme", effective);
+    })();
+  </script>
+
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#18181b" />
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#18181b" media="(prefers-color-scheme: dark)" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="PulseEight" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-left">
+      <span class="brand">PulseEight<span class="brand-accent">Control</span></span>
+    </div>
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="routing">Routing</button>
+      <button class="tab-btn" data-tab="hardware">Hardware</button>
+    </nav>
+    <div class="topbar-right">
+      <button id="updates-badge" class="updates-badge hidden" title="Firmware updates available"></button>
+      <select id="theme-select" class="theme-select" title="Theme">
+        <option value="system">System</option>
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
+    </div>
+  </header>
+
+  <main>
+    <section id="tab-routing" class="tab-panel active">
+      <div id="grid-scroll" class="grid-scroll">
+        <div id="grid" class="grid"></div>
+      </div>
+    </section>
+
+    <section id="tab-hardware" class="tab-panel">
+      <div class="hardware-grid">
+        <div class="card" id="system-card">
+          <h2>System</h2>
+          <div id="system-details" class="kv-list">Waiting for data&hellip;</div>
+        </div>
+        <div class="card" id="features-card">
+          <h2>Features</h2>
+          <div id="system-features" class="kv-list">Waiting for data&hellip;</div>
+        </div>
+        <div class="card wide" id="updates-card">
+          <h2>Firmware Updates</h2>
+          <div id="updates-list" class="kv-list">No updates detected.</div>
+        </div>
+        <div class="card wide" id="ports-card">
+          <h2>Ports</h2>
+          <div id="ports-table-wrap"></div>
+        </div>
+        <div class="card hidden" id="frontpanel-card">
+          <h2>Front Panel</h2>
+          <div class="frontpanel-controls">
+            <span class="segmented-label">Backlight</span>
+            <div class="segmented" id="backlight-segmented" role="radiogroup" aria-label="Backlight">
+              <button type="button" class="segmented-option" data-value="off">Off</button>
+              <button type="button" class="segmented-option" data-value="low">Dim</button>
+              <button type="button" class="segmented-option" data-value="high">Bright</button>
+            </div>
+
+            <span class="segmented-label" id="statusled-label">Status LEDs</span>
+            <label class="switch" id="statusled-row">
+              <input type="checkbox" id="statusled-toggle" />
+              <span class="switch-track"><span class="switch-thumb"></span></span>
+            </label>
+          </div>
+          <p id="backlight-error" class="form-error hidden"></p>
+          <p id="statusled-error" class="form-error hidden"></p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer id="status-bar" class="status-bar">
+    <div id="conn-indicator" class="conn-indicator disconnected">
+      <span class="conn-dot"></span>
+      <span id="conn-text">Not configured</span>
+    </div>
+  </footer>
+
+  <aside id="detail-drawer" class="drawer">
+    <div class="drawer-header">
+      <h3 id="drawer-title">Port</h3>
+      <button id="drawer-close" class="icon-btn">✕</button>
+    </div>
+    <div id="drawer-body" class="drawer-body">
+      <div id="drawer-rename" class="drawer-rename"></div>
+      <div id="drawer-kv" class="kv-list"></div>
+    </div>
+  </aside>
+  <div id="drawer-backdrop" class="drawer-backdrop hidden"></div>
+
+  <div id="connection-modal" class="modal-backdrop hidden">
+    <div class="modal">
+      <h2 id="connection-modal-title">Matrix Not Connected</h2>
+      <p id="connection-modal-message"></p>
+      <p id="connection-modal-error" class="form-error hidden"></p>
+      <div class="form-actions">
+        <button type="button" id="connection-modal-retry" class="primary-btn">Retry Now</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+backend/config.json
+service.log*
+scripts/windows/tools/
+.DS_Store

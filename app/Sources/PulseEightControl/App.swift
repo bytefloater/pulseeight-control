@@ -1,50 +1,21 @@
-import DefaultBackend
+import AppKitBackend
+import PulseEightCore
 import SwiftCrossUI
-
-#if os(macOS)
-    // The @main expansion uses AppKitBackend's feature conformances.
-    import AppKitBackend
-#endif
 
 @main
 struct PulseEightControlApp: App {
     @State var model = AppModel()
 
+    // The menu bar is built natively in MacChrome (with real shortcuts), and Settings is a native
+    // SwiftUI window (NativeSettings), so this scene is only the main window.
     var body: some Scene {
-        #if os(macOS)
-            // The menu bar is built natively in MacChrome (with real shortcuts).
-            mainWindow
-        #else
-            mainWindow.commands {
-                // No keyboard shortcuts: SwiftCrossUI 0.10 has no public API for them.
-                CommandMenu("Matrix") {
-                    Button("Refresh") { model.retry() }
-                    Divider()
-                    Button("Settings") { model.openSettings() }
-                }
-            }
-            settingsWindow
-        #endif
-    }
-
-    var mainWindow: some Scene {
         WindowGroup("PulseEight Control") {
-            DebugRoot(model: model)
+            RootView(model: model)
                 .preferredColorScheme(colorScheme)
                 .task { await model.start() }
         }
         .defaultSize(width: 900, height: 660)
     }
-
-    #if !os(macOS)
-        var settingsWindow: some Scene {
-            Window("Settings", id: "settings") {
-                SettingsWindow(model: model)
-                    .preferredColorScheme(colorScheme)
-            }
-            .defaultSize(width: SettingsWindow.width, height: SettingsWindow.height)
-        }
-    #endif
 
     var colorScheme: ColorScheme? {
         switch model.settings.appearance {

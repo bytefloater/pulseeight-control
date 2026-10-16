@@ -1,73 +1,53 @@
 import SwiftCrossUI
 
-#if os(macOS)
-    import AppKit
-    import AppKitBackend
+import AppKit
+import AppKitBackend
 
-    /// Text rotated to read bottom-to-top, for the routing grid's column headers.
-    /// SwiftCrossUI has no rotation modifier, so on macOS this is a small AppKit view.
-    struct RotatedLabel: NSViewRepresentable {
-        var text: String
+/// Text rotated to read bottom-to-top, for the routing grid's column headers.
+/// SwiftCrossUI has no rotation modifier, so on macOS this is a small AppKit view.
+struct RotatedLabel: NSViewRepresentable {
+    var text: String
 
-        func makeNSView(context: Context) -> RotatedTextView {
-            RotatedTextView()
-        }
+    func makeNSView(context: Context) -> RotatedTextView {
+        RotatedTextView()
+    }
 
-        func updateNSView(_ view: RotatedTextView, context: Context) {
-            view.text = text
+    func updateNSView(_ view: RotatedTextView, context: Context) {
+        view.text = text
+    }
+}
+
+final class RotatedTextView: NSView {
+    var text = "" {
+        didSet {
+            guard text != oldValue else { return }
+            invalidateIntrinsicContentSize()
+            needsDisplay = true
         }
     }
 
-    final class RotatedTextView: NSView {
-        var text = "" {
-            didSet {
-                guard text != oldValue else { return }
-                invalidateIntrinsicContentSize()
-                needsDisplay = true
-            }
-        }
-
-        private var attributes: [NSAttributedString.Key: Any] {
-            [.font: NSFont.systemFont(ofSize: 13), .foregroundColor: NSColor.labelColor]
-        }
-
-        override var intrinsicContentSize: NSSize {
-            let size = (text as NSString).size(withAttributes: attributes)
-            // Rotated: the text's width becomes our height.
-            return NSSize(width: ceil(size.height), height: ceil(size.width))
-        }
-
-        // Clicks and hovers belong to the SwiftCrossUI view wrapping this one.
-        override func hitTest(_ point: NSPoint) -> NSView? { nil }
-
-        override func draw(_ dirtyRect: NSRect) {
-            guard let context = NSGraphicsContext.current?.cgContext else { return }
-            // The view can be wider than its intrinsic width, so centre the glyphs' visible
-            // extent (baseline to cap height, ignoring descenders) in the bounds rather than
-            // pinning the line box to an edge. After the quarter turn, text "up" points left.
-            let font = attributes[.font] as! NSFont
-            let baselineX = bounds.width / 2 + font.capHeight / 2
-            context.translateBy(x: baselineX - font.descender, y: 0)
-            context.rotate(by: .pi / 2)
-            (text as NSString).draw(at: .zero, withAttributes: attributes)
-        }
+    private var attributes: [NSAttributedString.Key: Any] {
+        [.font: NSFont.systemFont(ofSize: 13), .foregroundColor: NSColor.labelColor]
     }
-#else
-    /// No rotation without AppKit, so the name is stacked one letter per line.
-    struct RotatedLabel: View {
-        var text: String
 
-        var body: some View {
-            VStack(spacing: 0) {
-                ForEach(Array(text.reversed().enumerated()).map { Letter(id: $0.offset, char: String($0.element)) }) { letter in
-                    Text(letter.char)
-                }
-            }
-        }
-
-        struct Letter: Identifiable {
-            var id: Int
-            var char: String
-        }
+    override var intrinsicContentSize: NSSize {
+        let size = (text as NSString).size(withAttributes: attributes)
+        // Rotated: the text's width becomes our height.
+        return NSSize(width: ceil(size.height), height: ceil(size.width))
     }
-#endif
+
+    // Clicks and hovers belong to the SwiftCrossUI view wrapping this one.
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        // The view can be wider than its intrinsic width, so centre the glyphs' visible
+        // extent (baseline to cap height, ignoring descenders) in the bounds rather than
+        // pinning the line box to an edge. After the quarter turn, text "up" points left.
+        let font = attributes[.font] as! NSFont
+        let baselineX = bounds.width / 2 + font.capHeight / 2
+        context.translateBy(x: baselineX - font.descender, y: 0)
+        context.rotate(by: .pi / 2)
+        (text as NSString).draw(at: .zero, withAttributes: attributes)
+    }
+}

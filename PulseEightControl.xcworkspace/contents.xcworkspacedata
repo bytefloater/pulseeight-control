@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Workspace
+   version = "1.0">
+   <FileRef
+      location = "group:swift">
+   </FileRef>
+   <FileRef
+      location = "group:app">
+   </FileRef>
+   <FileRef
+      location = "group:spikes/scui-spike">
+   </FileRef>
+   <FileRef
+      location = "group:tools">
+   </FileRef>
+   <FileRef
+      location = "group:backend">
+   </FileRef>
+   <FileRef
+      location = "group:scripts">
+   </FileRef>
+   <FileRef
+      location = "group:README.md">
+   </FileRef>
+</Workspace>

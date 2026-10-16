@@ -9,3 +9,8 @@ scripts/windows/tools/
 .build/
 .swiftpm/
 *.xcodeproj
+
+# Xcode user state (the workspace itself is committed)
+xcuserdata/
+*.xcuserstate
+xcshareddata/

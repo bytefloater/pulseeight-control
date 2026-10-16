@@ -14,7 +14,7 @@ struct RoutingPage: View {
     var body: some View {
         let inputs = model.state?.inputs ?? []
         let outputs = model.state?.outputs ?? []
-        ScrollView([.horizontal, .vertical]) {
+        PageScroll(axes: [.horizontal, .vertical]) {
             VStack(alignment: .leading, spacing: 16) {
                 if inputs.isEmpty || outputs.isEmpty {
                     Text("The matrix reported no ports.")
@@ -23,8 +23,7 @@ struct RoutingPage: View {
                     legend(inputs: inputs)
                 }
             }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .padding(24)
         }
         .alert($model.routeError) {
             Button("OK") {}

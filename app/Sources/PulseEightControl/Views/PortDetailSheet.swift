@@ -21,7 +21,7 @@ struct PortDetailSheet: View {
             }
         }
         .padding(20)
-        .frame(minWidth: 420)
+        .frame(minWidth: 520)
     }
 
     @ViewBuilder
@@ -47,7 +47,7 @@ struct PortDetailSheet: View {
                     ("Signal", base.videoSignal),
                     ("Source type", base.signal),
                     ("HDCP", details.hdcp.map(String.init)),
-                ], keyWidth: 150)
+                ])
             } else {
                 Text("Details haven't loaded yet.")
             }
@@ -68,7 +68,7 @@ struct PortDetailSheet: View {
                     ("Firmware version", firmwareText(details)),
                     ("TMDS", details.linkQuality.map { String($0.tmds) }),
                     ("Total BER", details.linkQuality.map { String($0.totalBER) }),
-                ], keyWidth: 150)
+                ])
             } else {
                 Text("Details haven't loaded yet.")
             }
@@ -77,23 +77,24 @@ struct PortDetailSheet: View {
 
     @ViewBuilder
     func editForm(_ selection: PortSelection, _ state: MatrixState) -> some View {
-        HStack {
-            Text("Name").foregroundColor(Color.gray).frame(width: 150, alignment: .leading)
+        FormRow("Name") {
             TextField("Up to \(AdminClient.maxNameLength) characters", text: $model.portEdit.name)
                 .frame(width: 200)
         }
         if selection.mode == .input {
-            HStack {
-                Text("EDID profile").foregroundColor(Color.gray).frame(width: 150, alignment: .leading)
+            FormRow("EDID profile") {
                 Picker(of: edidOptions(state), selection: edidBinding(state))
                     .pickerStyle(.menu)
             }
         }
-        Button(model.portEdit.saving ? "Saving…" : "Save") { model.savePortEdit() }
-            .disabled(model.portEdit.saving)
-        if let error = model.portEdit.error {
-            Text(error).foregroundColor(Color.system(.red))
+        FormRow("") {
+            Button(model.portEdit.saving ? "Saving…" : "Save") { model.savePortEdit() }
+                .disabled(model.portEdit.saving)
         }
+        if let error = model.portEdit.error {
+            FormRow("") { Text(error).foregroundColor(Color.system(.red)) }
+        }
+        Divider()
     }
 
     // MARK: Helpers

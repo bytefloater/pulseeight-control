@@ -113,6 +113,31 @@ final class AppModel {
 
     var adminConfigured: Bool { state?.adminConfigured ?? false }
 
+    /// One line for the window subtitle (macOS) or footer (elsewhere).
+    var connectionSummary: String {
+        switch phase {
+        case .connected: "Connected to \(hostLabel)"
+        case .connecting: "Connecting to \(hostLabel)…"
+        case .notConfigured: "Not configured"
+        case .disconnected: "Not connected to \(hostLabel)"
+        }
+    }
+
+    /// Short form for the macOS title bar; the host is in Settings.
+    var connectionShort: String {
+        switch phase {
+        case .connected: "Connected"
+        case .connecting: "Connecting…"
+        case .notConfigured: "Not configured"
+        case .disconnected: "Not connected"
+        }
+    }
+
+    /// Changes whenever something the native window chrome shows changes.
+    var chromeSignature: String {
+        "\(page?.rawValue ?? "")|\(connectionShort)|\(state?.updates.count ?? 0)"
+    }
+
     var hostLabel: String {
         guard let host = settings.matrix.host, !host.isEmpty else { return "no host" }
         return settings.matrix.port == 80 ? host : "\(host):\(settings.matrix.port)"

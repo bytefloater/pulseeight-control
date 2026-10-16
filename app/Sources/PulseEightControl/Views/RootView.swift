@@ -4,29 +4,33 @@ struct RootView: View {
     @Bindable var model: AppModel
 
     var body: some View {
-        NavigationSplitView {
-            VStack(spacing: 0) {
-                List(Page.allCases, id: \.self, selection: $model.page)
-                Spacer()
+        #if os(macOS)
+            // The page switcher is a native preferences-style toolbar (see MacChrome), and the
+            // connection state lives in the window subtitle, so the view is just the page.
+            content
+                .sheet(isPresented: sheetBinding) {
+                    PortDetailSheet(model: model)
+                }
+                .onChange(of: model.chromeSignature) { MacChrome.shared.sync() }
+                .task { await MacChrome.shared.install(model: model) }
+        #else
+            NavigationSplitView {
+                VStack(spacing: 0) {
+                    List(Page.allCases, id: \.self, selection: $model.page)
+                    Spacer()
+                }
+                .padding(8)
+            } detail: {
+                VStack(spacing: 0) {
+                    content
+                    Divider()
+                    ConnectionFooter(model: model)
+                }
             }
-            .padding(8)
-        } detail: {
-            VStack(spacing: 0) {
-                content
-                Divider()
-                ConnectionFooter(model: model)
+            .sheet(isPresented: sheetBinding) {
+                PortDetailSheet(model: model)
             }
-        }
-        .sheet(isPresented: sheetBinding) {
-            PortDetailSheet(model: model)
-        }
-    }
-
-    var sheetBinding: Binding<Bool> {
-        Binding(
-            get: { model.selectedPort != nil },
-            set: { if !$0 { model.selectedPort = nil } }
-        )
+        #endif
     }
 
     @ViewBuilder
@@ -41,5 +45,12 @@ struct RootView: View {
         } else {
             HardwarePage(model: model)
         }
+    }
+
+    var sheetBinding: Binding<Bool> {
+        Binding(
+            get: { model.selectedPort != nil },
+            set: { if !$0 { model.selectedPort = nil } }
+        )
     }
 }

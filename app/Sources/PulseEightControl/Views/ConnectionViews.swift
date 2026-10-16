@@ -31,14 +31,7 @@ struct ConnectionFooter: View {
         }
     }
 
-    var label: String {
-        switch model.phase {
-        case .connected: "Connected to \(model.hostLabel)"
-        case .connecting: "Connecting to \(model.hostLabel)…"
-        case .notConfigured: "Not configured"
-        case .disconnected: "Not connected to \(model.hostLabel)"
-        }
-    }
+    var label: String { model.connectionSummary }
 }
 
 /// Replaces a page's content while the matrix is unreachable. The old web UI used a modal here;

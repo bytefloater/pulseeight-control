@@ -44,25 +44,28 @@ struct HardwarePage: View {
     @Bindable var model: AppModel
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Hardware").font(.title2)
+        PageScroll {
+            VStack(alignment: .leading, spacing: 20) {
                 if let state = model.state {
                     if let system = state.system {
                         systemCard(system)
+                        Divider()
                         featuresCard(system.features)
                         if model.adminConfigured, system.features.backlightLED != nil || system.features.statusLED != nil {
+                            Divider()
                             frontPanelCard(system.features)
                         }
                     } else {
                         Text("System details haven't loaded yet.")
                     }
+                    Divider()
                     updatesCard(state)
+                    Divider()
                     portsCard(state)
                 }
             }
-            .padding(16)
-            .frame(maxWidth: 760, alignment: .topLeading)
+            .padding(24)
+            .frame(maxWidth: 640, alignment: .topLeading)
         }
     }
 
@@ -70,7 +73,7 @@ struct HardwarePage: View {
 
     func systemCard(_ system: SystemInfo) -> some View {
         let d = system.details
-        return Card("System") {
+        return FormSection("System") {
             KeyValueRows(pairs: [
                 ("Model", d.model),
                 ("Firmware version", d.version),
@@ -85,7 +88,7 @@ struct HardwarePage: View {
     }
 
     func featuresCard(_ f: SystemFeatures) -> some View {
-        Card("Features") {
+        FormSection("Features") {
             KeyValueRows(pairs: [
                 ("HDBaseT", yesNo(f.hdbaset)),
                 ("HDBaseT upgrade capable", yesNo(f.hdbtUpgrade)),
@@ -102,10 +105,9 @@ struct HardwarePage: View {
     }
 
     func frontPanelCard(_ f: SystemFeatures) -> some View {
-        Card("Front Panel") {
+        FormSection("Front Panel") {
             if let level = f.backlight {
-                HStack {
-                    Text("Backlight").foregroundColor(Color.gray).frame(width: 190, alignment: .leading)
+                FormRow("Backlight") {
                     Picker(of: BacklightOption.allCases, selection: backlightBinding(current: level))
                         .pickerStyle(.segmented)
                         .frame(width: 240)
@@ -113,8 +115,7 @@ struct HardwarePage: View {
                 }
             }
             if let on = f.statusLEDOn {
-                HStack {
-                    Text("Status LED").foregroundColor(Color.gray).frame(width: 190, alignment: .leading)
+                FormRow("Status LED") {
                     Toggle("", isOn: statusLEDBinding(current: on))
                         .toggleStyle(.switch)
                         .disabled(model.statusLEDPending != nil)
@@ -127,18 +128,16 @@ struct HardwarePage: View {
     }
 
     func updatesCard(_ state: MatrixState) -> some View {
-        Card("Firmware Updates") {
+        FormSection("Firmware Updates") {
             if state.updates.isEmpty {
                 Text("No updates detected.")
             } else {
                 ForEach(state.updates) { update in
-                    HStack {
-                        Text(update.name)
-                        if let version = update.firmwareVersion {
-                            Text("(current \(version))").foregroundColor(Color.gray)
-                        }
-                        Spacer()
+                    FormRow(update.name) {
                         Text("Update available").foregroundColor(Color.system(.orange))
+                        if let version = update.firmwareVersion {
+                            Text("current \(version)").foregroundColor(Color.gray)
+                        }
                     }
                     .onTapGesture { model.openPort(PortSelection(mode: .output, bay: update.bay)) }
                 }
@@ -151,7 +150,7 @@ struct HardwarePage: View {
     /// open the detail sheet. Whole-row tap gestures work.
     func portsCard(_ state: MatrixState) -> some View {
         let rows = portRows(state)
-        return Card("Ports") {
+        return FormSection("Ports") {
             if rows.isEmpty {
                 Text("No ports discovered yet.")
             } else {
@@ -181,19 +180,19 @@ struct HardwarePage: View {
         header: Bool, status: PortStatus? = nil, update: Bool = false
     ) -> some View {
         HStack(spacing: 0) {
-            portRowCell(port, width: 90, header: header)
-            portRowCell(name, width: 150, header: header)
-            portRowCell(type, width: 100, header: header)
+            portRowCell(port, width: 80, header: header)
+            portRowCell(name, width: 130, header: header)
+            portRowCell(type, width: 90, header: header)
             if let status {
                 HStack(spacing: 6) {
                     StatusDot(status: status)
                     Text(update ? "\(status.label) · update" : status.label)
                 }
-                .frame(width: 170, alignment: .leading)
+                .frame(width: 150, alignment: .leading)
             } else {
-                portRowCell(statusLabel ?? "", width: 170, header: header)
+                portRowCell(statusLabel ?? "", width: 150, header: header)
             }
-            portRowCell(source, width: 140, header: header)
+            portRowCell(source, width: 120, header: header)
         }
         .padding(.vertical, 5)
         .padding(.horizontal, 8)

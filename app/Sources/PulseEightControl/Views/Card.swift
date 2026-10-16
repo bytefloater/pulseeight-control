@@ -1,7 +1,8 @@
 import SwiftCrossUI
 
-/// SwiftCrossUI has no Form or Section, so this stands in for the old web UI's cards.
-struct Card<Content: View>: View {
+/// A titled group in a form. SwiftCrossUI has no Form or Section; groups are separated by
+/// dividers and laid out in a centred column, like System Settings.
+struct FormSection<Content: View>: View {
     var title: String
     var content: Content
 
@@ -11,29 +12,42 @@ struct Card<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             Text(title).font(.headline)
             content
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(Color.gray.opacity(0.1))
-        .cornerRadius(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// A label with a right-aligned caption and a control, the macOS settings idiom.
+struct FormRow<Content: View>: View {
+    static var labelWidth: Int { 190 }
+
+    var label: String
+    var content: Content
+
+    init(_ label: String, @ViewBuilder content: () -> Content) {
+        self.label = label
+        self.content = content()
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(label).foregroundColor(Color.gray).frame(width: Self.labelWidth, alignment: .trailing)
+            content
+        }
     }
 }
 
 /// Key/value rows. Rows whose value is nil or empty are skipped, like the old `kv()` helper.
 struct KeyValueRows: View {
     var pairs: [(String, String?)]
-    var keyWidth = 190
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             ForEach(visible, id: \.0) { pair in
-                HStack(alignment: .top) {
-                    Text(pair.0).foregroundColor(Color.gray).frame(width: keyWidth, alignment: .leading)
-                    Text(pair.1)
-                }
+                FormRow(pair.0) { Text(pair.1) }
             }
         }
     }

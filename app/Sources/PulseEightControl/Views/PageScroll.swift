@@ -18,15 +18,24 @@ struct PageScroll<Content: View>: View {
 
     var body: some View {
         GeometryReader { geometry in
+            // Layout probing reports zero or infinite sizes. AppKit tolerates them, but WinUI aborts
+            // the process (stowed exception) on an infinite or NaN width/height, so only finite,
+            // positive sizes are ever turned into frames.
+            let width = Self.usable(geometry.size.width)
+            let height = Self.usable(geometry.size.height)
             ScrollView(.vertical) {
                 if scrollsHorizontally {
                     ScrollView(.horizontal) { content }
                 } else {
-                    content.frame(minWidth: geometry.size.width, alignment: alignment)
+                    content.frame(minWidth: width, alignment: alignment)
                 }
             }
             // Without this the scroll view is sized to its content and GeometryReader centres it.
-            .frame(width: geometry.size.width, height: geometry.size.height)
+            .frame(width: width, height: height)
         }
+    }
+
+    static func usable(_ length: Double) -> Double? {
+        length.isFinite && length > 0 ? length : nil
     }
 }

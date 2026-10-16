@@ -3,13 +3,12 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace PulseEightControl;
 
-public sealed class App : Application
+public partial class App : Application
 {
     private MainWindow? _window;
-
     public App()
     {
-        Resources.MergedDictionaries.Add(new XamlControlsResources());
+        InitializeComponent();
         UnhandledException += (_, e) => CrashLog.Write(e.Exception);
     }
 

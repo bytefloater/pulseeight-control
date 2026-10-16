@@ -9,7 +9,7 @@ Swift core in `../swift`, loaded as `pulseeight_core.dll` and driven with JSON. 
 |---|---|
 | `PulseEight.Core` | Managed wrapper over the C interface (`CoreClient`, snapshot types). No UI, builds on any OS. |
 | `PulseEight.Core.Tests` | xUnit tests; the end-to-end ones run against the real library and `tools/fake_matrix.py`. |
-| `PulseEightControl` | The WinUI 3 app. Built in code (no XAML) so it type-checks on any OS. |
+| `PulseEightControl` | The WinUI 3 app. The interface is built in code; the only XAML is `App.xaml`, which WinUI needs to load its control styles. |
 
 ## Build and run (on Windows)
 
@@ -41,6 +41,6 @@ Without `P8_CORE_LIBRARY` the end-to-end tests are skipped. On macOS use
 
 * The app can be type-checked off Windows with
   `dotnet build windows/PulseEightControl -p:EnableWindowsTargeting=true -p:Platform=ARM64 -p:WindowsAppSDKSelfContained=false -p:SelfContained=false -p:ApplicationManifest=`
-  (the manifest and XAML tools only run on Windows). That catches compile errors, not runtime ones.
+  (the manifest and XAML tools only run on Windows, so off Windows this can no longer compile `App.xaml`; build on Windows to type-check). That catches compile errors, not runtime ones.
 * The admin password is kept in a plain file under `%APPDATA%\PulseEightControl` until the core gains
   Windows Credential Manager support.

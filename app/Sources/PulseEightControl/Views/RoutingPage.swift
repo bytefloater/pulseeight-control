@@ -29,9 +29,6 @@ struct RoutingPage: View {
         .alert($model.routeError) {
             Button("OK") {}
         }
-        .sheet(isPresented: sheetBinding) {
-            PortDetailSheet(model: model)
-        }
     }
 
     // MARK: Grid
@@ -71,7 +68,7 @@ struct RoutingPage: View {
         }
         .frame(width: Self.cell, height: Self.cell)
         .help("\(input.name): \(input.status.label). Click for details")
-        .onTapGesture { model.selectedPort = PortSelection(mode: .input, bay: input.bay) }
+        .onTapGesture { model.openPort(PortSelection(mode: .input, bay: input.bay)) }
     }
 
     func rowHeader(_ output: MatrixPort) -> some View {
@@ -82,7 +79,7 @@ struct RoutingPage: View {
         .frame(width: Self.rowHeader, height: Self.cell, alignment: .trailing)
         .padding(.trailing, 6)
         .help("\(output.name): \(output.status.label). Click for details")
-        .onTapGesture { model.selectedPort = PortSelection(mode: .output, bay: output.bay) }
+        .onTapGesture { model.openPort(PortSelection(mode: .output, bay: output.bay)) }
     }
 
     // No semantic label colours, so only override the colour when highlighted and otherwise
@@ -118,16 +115,9 @@ struct RoutingPage: View {
                     Text("\(input.bay + 1)  \(input.name)")
                 }
                 .help("\(input.status.label). Click for details")
-                .onTapGesture { model.selectedPort = PortSelection(mode: .input, bay: input.bay) }
+                .onTapGesture { model.openPort(PortSelection(mode: .input, bay: input.bay)) }
             }
         }
-    }
-
-    var sheetBinding: Binding<Bool> {
-        Binding(
-            get: { model.selectedPort != nil },
-            set: { if !$0 { model.selectedPort = nil } }
-        )
     }
 }
 

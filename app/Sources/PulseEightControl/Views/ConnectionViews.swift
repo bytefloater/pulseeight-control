@@ -12,6 +12,9 @@ struct ConnectionFooter: View {
                 .frame(width: 10, height: 10)
             Text(label)
             Spacer()
+            if let count = model.state?.updates.count, count > 0 {
+                Button("\(count) firmware update\(count == 1 ? "" : "s") available") { model.page = .hardware }
+            }
             if model.adminConfigured {
                 Text("Admin enabled")
             }

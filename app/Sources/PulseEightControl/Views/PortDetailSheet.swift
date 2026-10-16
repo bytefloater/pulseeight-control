@@ -1,9 +1,14 @@
 import PulseEightKit
 import SwiftCrossUI
 
-/// Read-only for now; M4 adds rename and EDID.
+struct EdidOption: Equatable, CustomStringConvertible {
+    var id: Int
+    var description: String
+}
+
+/// Port details, plus rename and (for inputs) EDID profile when an admin password is set.
 struct PortDetailSheet: View {
-    var model: AppModel
+    @Bindable var model: AppModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -16,7 +21,7 @@ struct PortDetailSheet: View {
             }
         }
         .padding(20)
-        .frame(minWidth: 380)
+        .frame(minWidth: 420)
     }
 
     @ViewBuilder
@@ -25,53 +30,97 @@ struct PortDetailSheet: View {
         Text(port?.name ?? "\(selection.mode.rawValue) \(selection.bay + 1)").font(.title2)
         Text("\(selection.mode.rawValue) \(selection.bay + 1)").font(.caption)
 
+        if model.adminConfigured {
+            editForm(selection, state)
+        } else {
+            Text("Set an admin password in Settings to rename ports or change EDID.").font(.caption)
+        }
+
         switch selection.mode {
         case .input:
             if let details = state.inputDetails[selection.bay] {
                 let base = details.base
-                rows([
+                KeyValueRows(pairs: [
                     ("Status", base.statusDescription),
                     ("Type", base.type),
+                    ("Has signal", base.hasSignal.map(yesNo)),
                     ("Signal", base.videoSignal),
                     ("Source type", base.signal),
                     ("HDCP", details.hdcp.map(String.init)),
-                    ("EDID profile", details.edidProfile.map(String.init)),
-                ])
+                ], keyWidth: 150)
             } else {
                 Text("Details haven't loaded yet.")
             }
         case .output:
             if let details = state.outputDetails[selection.bay] {
                 let base = details.base
-                rows([
+                KeyValueRows(pairs: [
                     ("Status", base.statusDescription),
                     ("Type", base.type),
-                    ("Source", port?.receiveFrom.map { sourceName($0, state) }),
-                    ("Display", details.monitorName),
-                    ("Link", details.linkStatus),
+                    ("Has signal", base.hasSignal.map(yesNo)),
+                    ("Signal", base.videoSignal ?? base.signal),
+                    ("Routed from input", port?.receiveFrom.map { sourceName($0, state) }),
+                    ("Link status", details.linkStatus),
+                    ("Cable length (est.)", details.estimatedCableLength.flatMap { $0 > 0 ? "\($0) m" : nil }),
+                    ("Sink vendor", details.vendor),
+                    ("Sink model", details.monitorName),
                     ("PoE", details.poe.map { $0 ? "On" : "Off" }),
-                    ("Firmware", details.firmwareVersion),
-                    ("Firmware update", details.firmwareVersionAvailable == true ? "Available" : nil),
-                ])
+                    ("Firmware version", firmwareText(details)),
+                    ("TMDS", details.linkQuality.map { String($0.tmds) }),
+                    ("Total BER", details.linkQuality.map { String($0.totalBER) }),
+                ], keyWidth: 150)
             } else {
                 Text("Details haven't loaded yet.")
             }
         }
     }
 
-    func sourceName(_ bay: Int, _ state: MatrixState) -> String {
-        state.inputs.first { $0.bay == bay }?.name ?? "Input \(bay + 1)"
-    }
-
-    /// Skips rows the device didn't report, like the old web UI's key/value cards.
-    func rows(_ pairs: [(String, String?)]) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(pairs.compactMap { key, value in value.flatMap { $0.isEmpty ? nil : (key, $0) } }, id: \.0) { pair in
-                HStack(alignment: .top) {
-                    Text(pair.0).frame(width: 120, alignment: .leading)
-                    Text(pair.1)
-                }
+    @ViewBuilder
+    func editForm(_ selection: PortSelection, _ state: MatrixState) -> some View {
+        HStack {
+            Text("Name").foregroundColor(Color.gray).frame(width: 150, alignment: .leading)
+            TextField("Up to \(AdminClient.maxNameLength) characters", text: $model.portEdit.name)
+                .frame(width: 200)
+        }
+        if selection.mode == .input {
+            HStack {
+                Text("EDID profile").foregroundColor(Color.gray).frame(width: 150, alignment: .leading)
+                Picker(of: edidOptions(state), selection: edidBinding(state))
+                    .pickerStyle(.menu)
             }
         }
+        Button(model.portEdit.saving ? "Saving…" : "Save") { model.savePortEdit() }
+            .disabled(model.portEdit.saving)
+        if let error = model.portEdit.error {
+            Text(error).foregroundColor(Color.system(.red))
+        }
+    }
+
+    // MARK: Helpers
+
+    func edidOptions(_ state: MatrixState) -> [EdidOption] {
+        var options = EdidProfiles.build(scrambling: state.system?.features.video.scrambling ?? false, ports: state.ports)
+            .map { EdidOption(id: $0.id, description: $0.name) }
+        // A profile the matrix reports but we have no name for, e.g. one set from its own web UI.
+        if let current = model.portEdit.edidProfile, !options.contains(where: { $0.id == current }) {
+            options.append(EdidOption(id: current, description: "Custom Profile (\(current))"))
+        }
+        return options
+    }
+
+    func edidBinding(_ state: MatrixState) -> Binding<EdidOption?> {
+        Binding(
+            get: { edidOptions(state).first { $0.id == model.portEdit.edidProfile } },
+            set: { if let option = $0 { model.portEdit.edidProfile = option.id } }
+        )
+    }
+
+    func firmwareText(_ details: OutputPortDetails) -> String? {
+        guard let version = details.firmwareVersion, !version.isEmpty else { return nil }
+        return "\(version)  (\(details.firmwareVersionAvailable == true ? "update available" : "up to date"))"
+    }
+
+    func sourceName(_ bay: Int, _ state: MatrixState) -> String {
+        state.inputs.first { $0.bay == bay }?.name ?? "Input \(bay + 1)"
     }
 }

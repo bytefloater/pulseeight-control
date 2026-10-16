@@ -63,7 +63,7 @@ class Matrix:
 
     def features(self):
         return {
-            "Result": True, "UpdInterval": 5, "CEC": 1, "CEC_Switching": False, "CEC_Logging": 0,
+            "Result": True, "UpdInterval": 5000, "CEC": 1, "CEC_Switching": False, "CEC_Logging": 0,
             "CEC_Usage": 1, "PDU": False, "Sky": True, "HDBaseT": True, "HdbtUpgrade": True,
             "MxRemote": False,
             "Video": {"Scrambling": True, "Input": {"Bays": BAYS}, "Output": {"Bays": BAYS}},

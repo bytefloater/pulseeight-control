@@ -17,6 +17,16 @@ struct RootView: View {
                 ConnectionFooter(model: model)
             }
         }
+        .sheet(isPresented: sheetBinding) {
+            PortDetailSheet(model: model)
+        }
+    }
+
+    var sheetBinding: Binding<Bool> {
+        Binding(
+            get: { model.selectedPort != nil },
+            set: { if !$0 { model.selectedPort = nil } }
+        )
     }
 
     @ViewBuilder

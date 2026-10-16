@@ -30,6 +30,14 @@ struct PortSelection: Equatable {
     var bay: Int
 }
 
+/// Rename + EDID form in the port sheet.
+struct PortEditDraft: Equatable {
+    var name = ""
+    var edidProfile: Int?
+    var error: String?
+    var saving = false
+}
+
 /// Text fields in the Settings page, kept as strings until Save validates them.
 struct SettingsDraft: Equatable {
     var host = ""
@@ -73,6 +81,12 @@ final class AppModel {
     var routeError: String?
     /// The port whose detail sheet is open.
     var selectedPort: PortSelection?
+    var portEdit = PortEditDraft()
+    /// Front panel controls hold their new value here until the matrix confirms it, so a poll
+    /// landing mid-request doesn't flip the control back.
+    var backlightPending: BacklightLevel?
+    var statusLEDPending: Bool?
+    var frontPanelError: String?
 
     private let secrets: SecretStore
     private var store: MatrixStore?
@@ -139,6 +153,87 @@ final class AppModel {
                 routeError = "Failed to set route: \(error.localizedDescription)"
             }
             pendingRoutes.remove(key)
+        }
+    }
+
+    // MARK: Port editing
+
+    func openPort(_ selection: PortSelection) {
+        guard let state else { return }
+        let port = state.ports.first { $0.mode == selection.mode && $0.bay == selection.bay }
+        portEdit = PortEditDraft(
+            name: port?.name ?? "",
+            edidProfile: selection.mode == .input ? state.inputDetails[selection.bay]?.edidProfile : nil
+        )
+        selectedPort = selection
+    }
+
+    func savePortEdit() {
+        guard let store, let selection = selectedPort, let state, !portEdit.saving else { return }
+        let name = portEdit.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return portEdit.error = "Name can't be empty." }
+        guard name.unicodeScalars.count <= AdminClient.maxNameLength else {
+            return portEdit.error = "Name must be \(AdminClient.maxNameLength) characters or fewer."
+        }
+        let current = state.ports.first { $0.mode == selection.mode && $0.bay == selection.bay }?.name
+        let currentEdid = selection.mode == .input ? state.inputDetails[selection.bay]?.edidProfile : nil
+        let newEdid = selection.mode == .input ? portEdit.edidProfile : nil
+
+        portEdit.error = nil
+        portEdit.saving = true
+        Task {
+            do {
+                if name != current {
+                    try await store.renamePort(mode: selection.mode, bay: selection.bay, name: name)
+                }
+                if let newEdid, newEdid != currentEdid {
+                    try await store.setEdidProfile(bay: selection.bay, profile: newEdid)
+                }
+                portEdit.name = name
+            } catch {
+                portEdit.error = error.localizedDescription
+            }
+            portEdit.saving = false
+        }
+    }
+
+    // MARK: Front panel
+
+    func setBacklight(_ level: BacklightLevel) {
+        guard let store, backlightPending == nil else { return }
+        frontPanelError = nil
+        backlightPending = level
+        Task {
+            do {
+                try await store.setBacklight(level)
+                await waitForState { $0.system?.features.backlight == level }
+            } catch {
+                frontPanelError = error.localizedDescription
+            }
+            backlightPending = nil
+        }
+    }
+
+    func setStatusLED(on: Bool) {
+        guard let store, statusLEDPending == nil else { return }
+        frontPanelError = nil
+        statusLEDPending = on
+        Task {
+            do {
+                try await store.setStatusLED(on: on)
+                await waitForState { $0.system?.features.statusLEDOn == on }
+            } catch {
+                frontPanelError = error.localizedDescription
+            }
+            statusLEDPending = nil
+        }
+    }
+
+    /// The store refreshes system info shortly after a write; give it a few seconds.
+    private func waitForState(_ condition: (MatrixState) -> Bool) async {
+        for _ in 0..<30 {
+            if let state, condition(state) { return }
+            try? await Task.sleep(nanoseconds: 100_000_000)
         }
     }
 

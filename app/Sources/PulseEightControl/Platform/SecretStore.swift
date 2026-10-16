@@ -18,6 +18,8 @@ enum SecretStores {
     /// Keychain on macOS. Elsewhere a 0600 file until the Credential Manager and libsecret
     /// stores land in M5.
     static func makeDefault() -> SecretStore {
+        // Dev switch: lets tests run against a throwaway P8_CONFIG_DIR without touching the keychain.
+        if ProcessInfo.processInfo.environment["P8_SECRET_STORE"] == "file" { return FileSecretStore() }
         #if canImport(Security)
             return KeychainSecretStore()
         #else

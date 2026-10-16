@@ -29,6 +29,14 @@ let package = Package(
                     ["-Xlinker", "-platform_version", "-Xlinker", "macos", "-Xlinker", "14.0", "-Xlinker", "26.0"],
                     .when(platforms: [.macOS])
                 ),
+                // An unbundled executable has no bundle identifier, so AppKit logs errors about
+                // App Intents (linkd) and window-tab indexing, and the menu bar shows the process
+                // name. Embedding an Info.plist in the binary supplies the identity until the app is
+                // packaged properly (Swift Bundler, M6).
+                .unsafeFlags(
+                    ["-Xlinker", "-sectcreate", "-Xlinker", "__TEXT", "-Xlinker", "__info_plist", "-Xlinker", "Info.plist"],
+                    .when(platforms: [.macOS])
+                ),
             ]
         ),
     ]

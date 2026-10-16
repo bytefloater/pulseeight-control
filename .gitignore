@@ -6,3 +6,6 @@ backend/config.json
 service.log*
 scripts/windows/tools/
 .DS_Store
+.build/
+.swiftpm/
+*.xcodeproj

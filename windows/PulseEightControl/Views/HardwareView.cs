@@ -50,17 +50,19 @@ internal sealed class HardwareView : UserControl
         var page = new StackPanel { Spacing = 4 };
         page.Children.Add(Ui.Header("Hardware"));
 
-        page.Children.Add(Ui.Section("System", Card(snapshot.SystemRows)));
-        page.Children.Add(Ui.Section("Features", Card(snapshot.FeatureRows)));
+        page.Children.Add(Ui.Columns(
+            Ui.Section("System", Card(snapshot.SystemRows)),
+            Ui.Section("Features", Card(snapshot.FeatureRows))));
 
-        if (snapshot.AdminConfigured && snapshot.FrontPanel is { } panel)
-            page.Children.Add(Ui.Section("Front panel", FrontPanel(panel)));
+        var panel = snapshot.AdminConfigured ? snapshot.FrontPanel : null;
+        var updates = Ui.Section("Firmware updates", Updates(snapshot));
+        page.Children.Add(panel is null ? updates : Ui.Columns(Ui.Section("Front panel", FrontPanel(panel)), updates));
 
-        page.Children.Add(Ui.Section("Firmware updates", Updates(snapshot)));
-        page.Children.Add(Ui.Section("Inputs", Ports(snapshot, snapshot.Inputs)));
-        page.Children.Add(Ui.Section("Outputs", Ports(snapshot, snapshot.Outputs)));
+        page.Children.Add(Ui.Columns(
+            Ui.Section("Inputs", Ports(snapshot, snapshot.Inputs)),
+            Ui.Section("Outputs", Ports(snapshot, snapshot.Outputs))));
 
-        return Ui.Page(page);
+        return Ui.Column(page); // _host is the one ScrollViewer
     }
 
     private static UIElement Card(IReadOnlyList<LabeledValue> rows) =>
@@ -137,6 +139,7 @@ internal sealed class HardwareView : UserControl
 
             line.Children.Add(Ui.Dot(Palette.Status(port.Status)));
             var name = Ui.Text($"{port.Number}  {port.Name}");
+            name.TextTrimming = TextTrimming.CharacterEllipsis;
             Grid.SetColumn(name, 1);
             line.Children.Add(name);
 

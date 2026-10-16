@@ -11,12 +11,12 @@ internal sealed class SettingsView : UserControl
     private static readonly string[] Appearances = ["system", "light", "dark"];
 
     private readonly CoreClient _core;
-    private readonly TextBox _host = new() { Width = 240, PlaceholderText = "192.168.1.150" };
+    private readonly TextBox _host = new() { Width = 200, PlaceholderText = "192.168.1.150" };
     private readonly TextBox _port = new() { Width = 120 };
     private readonly TextBox _timeout = new() { Width = 120 };
     private readonly TextBox _poll = new() { Width = 120 };
     private readonly TextBox _detailPoll = new() { Width = 120 };
-    private readonly PasswordBox _password = new() { Width = 240 };
+    private readonly PasswordBox _password = new() { Width = 260 };
     private readonly Button _removePassword = new() { Content = "Remove saved password" };
     private readonly Button _save = new() { Content = "Save and connect" };
     private readonly TextBlock _message = Ui.Text("", "CaptionTextBlockStyle", wrap: true);
@@ -32,7 +32,7 @@ internal sealed class SettingsView : UserControl
     {
         _core = core;
         foreach (var name in new[] { "Use system setting", "Light", "Dark" }) _appearance.Items.Add(name);
-        _password.PlaceholderText = "Leave blank to keep the saved password";
+        _password.PlaceholderText = "Leave blank to keep";
 
         _save.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
         _save.Click += async (_, _) => await SaveAsync();
@@ -48,17 +48,20 @@ internal sealed class SettingsView : UserControl
         Content = Ui.Page(Build());
     }
 
+
     private UIElement Build()
     {
         var page = new StackPanel { Spacing = 4 };
         page.Children.Add(Ui.Header("Settings"));
 
-        page.Children.Add(Ui.Section("Matrix", Ui.Card(
-            Ui.Row("Address", _host, "Host name or IP address of the matrix"),
-            Ui.Row("Port", _port),
-            Ui.Row("Timeout", _timeout, "Seconds to wait for a reply"),
-            Ui.Row("Refresh interval", _poll, "Seconds between status checks"),
-            Ui.Row("Port detail interval", _detailPoll, "Seconds between port detail checks"))));
+        page.Children.Add(Ui.Columns(
+            Ui.Section("Matrix", Ui.Card(
+                Ui.Row("Address", _host, "Host name or IP address"),
+                Ui.Row("Port", _port))),
+            Ui.Section("Polling", Ui.Card(
+                Ui.Row("Timeout", _timeout, "Seconds to wait for a reply"),
+                Ui.Row("Refresh interval", _poll, "Seconds between status checks"),
+                Ui.Row("Port detail interval", _detailPoll, "Seconds between port detail checks")))));
 
         page.Children.Add(Ui.Section("Administrator", Ui.Card(
             Ui.Row("Password", _password, "Needed to rename ports, change EDID profiles and use the front panel controls"),

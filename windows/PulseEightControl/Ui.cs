@@ -72,8 +72,33 @@ internal static class Ui
         text.IsTextSelectionEnabled = true;
         text.TextAlignment = TextAlignment.Right;
         text.TextWrapping = TextWrapping.Wrap;
-        text.MaxWidth = 420;
+        text.MaxWidth = 320;
         return Row(label, text);
+    }
+
+    /// <summary>Two sections side by side when there is room, stacked when there isn't.</summary>
+    public static Grid Columns(UIElement left, UIElement right, double breakpoint = 720)
+    {
+        var grid = new Grid { ColumnSpacing = 16, RowSpacing = 4 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.Children.Add(left);
+        grid.Children.Add(right);
+        if (left is FrameworkElement l) l.VerticalAlignment = VerticalAlignment.Top;
+        if (right is FrameworkElement r) r.VerticalAlignment = VerticalAlignment.Top;
+
+        void Arrange()
+        {
+            var wide = grid.ActualWidth >= breakpoint;
+            grid.ColumnDefinitions[1].Width = wide ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+            Grid.SetColumn((FrameworkElement)right, wide ? 1 : 0);
+            Grid.SetRow((FrameworkElement)right, wide ? 0 : 1);
+        }
+        grid.SizeChanged += (_, _) => Arrange();
+        Arrange();
+        return grid;
     }
 
     public static StackPanel Section(string header, UIElement body)
@@ -86,17 +111,28 @@ internal static class Ui
         return stack;
     }
 
-    public static ScrollViewer Page(UIElement content)
+    private const double PageMaxWidth = 1100;
+    private const double PageGutter = 36;
+
+    /// <summary>A content column no wider than <see cref="PageMaxWidth"/>, centred in the space it is
+    /// given. Sized explicitly: MaxWidth on a stretched element did not centre reliably.</summary>
+    public static FrameworkElement Column(UIElement content)
     {
-        var column = new Grid { MaxWidth = 760, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(24, 8, 24, 24) };
-        column.Children.Add(content);
-        return new ScrollViewer
-        {
-            Content = column,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-        };
+        var inner = new Grid { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 8, 0, 24) };
+        inner.Children.Add(content);
+        var outer = new Grid { HorizontalAlignment = HorizontalAlignment.Stretch };
+        outer.Children.Add(inner);
+        outer.SizeChanged += (_, e) => inner.Width = Math.Max(0, Math.Min(PageMaxWidth, e.NewSize.Width - 2 * PageGutter));
+        return outer;
     }
+
+    /// <summary>A scrolling page whose content is a centred column.</summary>
+    public static ScrollViewer Page(UIElement content) => new()
+    {
+        Content = Column(content),
+        VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+        HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+    };
 
     public static FrameworkElement Header(string title)
     {
@@ -120,6 +156,8 @@ internal static class Dialogs
         try
         {
             dialog.XamlRoot = Root;
+            // Dialogs are hosted at the window root and do not inherit its theme.
+            if (Root.Content is FrameworkElement window) dialog.RequestedTheme = window.ActualTheme;
             await dialog.ShowAsync();
         }
         finally { Gate.Release(); }

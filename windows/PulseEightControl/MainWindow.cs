@@ -7,12 +7,14 @@ using PulseEight.Core;
 using PulseEightControl.Views;
 using Windows.Graphics;
 using Windows.System;
+using Windows.UI;
 
 namespace PulseEightControl;
 
 public sealed class MainWindow : Window
 {
     private readonly CoreClient _core = new();
+    private readonly TitleBar _titleBar = new() { Title = "PulseEight Control" };
     private readonly NavigationView _navigation = new();
     private readonly Border _content = new();
     private readonly StatusBarView _statusBar = new();
@@ -32,6 +34,10 @@ public sealed class MainWindow : Window
     {
         _snapshot = _core.Snapshot;
         Title = "PulseEight Control";
+        // Modern WinUI 3 title bar: the app draws it (so Mica runs right to the top edge) and the
+        // system keeps the caption buttons.
+        ExtendsContentIntoTitleBar = true;
+        SetTitleBar(_titleBar);
         SystemBackdrop = new MicaBackdrop();
         AppWindow.Resize(new SizeInt32(1100, 780));
 
@@ -54,10 +60,13 @@ public sealed class MainWindow : Window
         _navigation.Content = _content;
         _navigation.SelectionChanged += (_, _) => ShowSelectedPage();
 
+        _root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         _root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         _root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        _root.Children.Add(_titleBar);
+        Grid.SetRow(_navigation, 1);
         _root.Children.Add(_navigation);
-        Grid.SetRow(_statusBar, 1);
+        Grid.SetRow(_statusBar, 2);
         _root.Children.Add(_statusBar);
         Content = _root;
 
@@ -70,6 +79,7 @@ public sealed class MainWindow : Window
         {
             Dialogs.Root = _root.XamlRoot;
             Palette.Update(_root.ActualTheme);
+            ApplyCaptionColors(_root.ActualTheme);
             _routing.Invalidate();
             _hardware.Invalidate();
             Refresh();
@@ -82,6 +92,7 @@ public sealed class MainWindow : Window
         _root.ActualThemeChanged += (_, _) =>
         {
             Palette.Update(_root.ActualTheme);
+            ApplyCaptionColors(_root.ActualTheme);
             _routing.Invalidate();
             _hardware.Invalidate();
             Refresh();
@@ -94,6 +105,28 @@ public sealed class MainWindow : Window
         _core.Changed += snapshot => DispatcherQueue.TryEnqueue(() => OnChanged(snapshot));
         ApplyTheme(_snapshot);
         Refresh();
+    }
+
+    /// <summary>The caption buttons follow the system theme unless told otherwise; make them follow
+    /// the app's, which can differ (Settings > Appearance).</summary>
+    private void ApplyCaptionColors(ElementTheme theme)
+    {
+        var titleBar = AppWindow.TitleBar;
+        var dark = theme == ElementTheme.Dark;
+        var foreground = dark ? Color.FromArgb(255, 255, 255, 255) : Color.FromArgb(255, 0, 0, 0);
+        var hover = dark ? Color.FromArgb(24, 255, 255, 255) : Color.FromArgb(18, 0, 0, 0);
+        var pressed = dark ? Color.FromArgb(16, 255, 255, 255) : Color.FromArgb(12, 0, 0, 0);
+        var inactive = dark ? Color.FromArgb(255, 143, 143, 143) : Color.FromArgb(255, 153, 153, 153);
+        var clear = Color.FromArgb(0, 0, 0, 0);
+
+        titleBar.ButtonBackgroundColor = clear;
+        titleBar.ButtonInactiveBackgroundColor = clear;
+        titleBar.ButtonForegroundColor = foreground;
+        titleBar.ButtonInactiveForegroundColor = inactive;
+        titleBar.ButtonHoverBackgroundColor = hover;
+        titleBar.ButtonHoverForegroundColor = foreground;
+        titleBar.ButtonPressedBackgroundColor = pressed;
+        titleBar.ButtonPressedForegroundColor = foreground;
     }
 
     private void AddShortcut(VirtualKey key, Action action)

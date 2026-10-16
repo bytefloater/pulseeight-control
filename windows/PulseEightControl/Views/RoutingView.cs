@@ -185,12 +185,27 @@ internal sealed class RoutingView : UserControl
             BorderBrush = Palette.CellBorder,
             Tag = routed || pending, // active cells keep their colour while hovered
         };
-        if (routed || pending)
-            cell.Child = new Ellipse { Width = 8, Height = 8, Fill = Palette.OnAccent, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        if (pending)
+        {
+            // Waiting for the matrix to confirm: an indeterminate ring in place of the tick.
+            cell.Child = new ProgressRing
+            {
+                IsActive = true, IsIndeterminate = true, Width = 14, Height = 14, Foreground = Palette.OnAccent,
+                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+            };
+        }
+        else if (routed)
+        {
+            cell.Child = new FontIcon
+            {
+                Glyph = "", FontSize = 14, Foreground = Palette.OnAccent, // CheckMark
+                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+            };
+        }
 
         var tip = $"{input.Name} → {output.Name}";
         ToolTipService.SetToolTip(cell, tip);
-        AutomationProperties.SetName(cell, routed ? $"{tip}, routed" : tip);
+        AutomationProperties.SetName(cell, pending ? $"{tip}, routing" : routed ? $"{tip}, routed" : tip);
         cell.Tapped += (_, _) => Route(input, output);
         cell.PointerEntered += (_, _) => SetHover(row, column);
         cell.PointerExited += (_, _) => SetHover(-1, -1);

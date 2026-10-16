@@ -15,6 +15,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     /// Row/column highlight under the pointer in the routing grid.
     public var highlightGrid = true
     public var showStatusBar = true
+    /// A language code (see `Languages.all`) or `Languages.systemSetting` to follow the OS.
+    public var language = Languages.systemSetting
 
     public init() {}
 
@@ -24,6 +26,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         appearance = try c.decodeIfPresent(Appearance.self, forKey: .appearance) ?? .system
         highlightGrid = try c.decodeIfPresent(Bool.self, forKey: .highlightGrid) ?? true
         showStatusBar = try c.decodeIfPresent(Bool.self, forKey: .showStatusBar) ?? true
+        language = try c.decodeIfPresent(String.self, forKey: .language) ?? Languages.systemSetting
     }
 
     /// Missing or unreadable files give defaults.

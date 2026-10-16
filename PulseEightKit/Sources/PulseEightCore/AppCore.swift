@@ -109,20 +109,26 @@ public final class AppCore: @unchecked Sendable {
 
     public var update: CoreUpdate { locked { makeUpdate() } }
 
+    /// The language in force: the saved setting, or the operating system's when it is "system".
+    public var language: Language { Languages.resolve(settings.language) }
+
+    /// Text for the language in force. Ask again after a change (observers hear about those).
+    public var strings: Strings { Strings(language: language) }
+
     /// "Connected to 192.168.1.150" and friends.
     public var connectionSummary: String {
         switch phase {
-        case .connected: "Connected to \(hostLabel)"
-        case .connecting: "Connecting to \(hostLabel)…"
-        case .notConfigured: "Not configured"
-        case .disconnected: "Not connected to \(hostLabel)"
+        case .connected: strings.text(.connectionConnected, hostLabel)
+        case .connecting: strings.text(.connectionConnecting, hostLabel)
+        case .notConfigured: strings.text(.connectionNotConfigured)
+        case .disconnected: strings.text(.connectionDisconnected, hostLabel)
         }
     }
 
     /// Host, plus the port when it isn't 80.
     public var hostLabel: String {
         let config = settings.matrix
-        guard let host = config.host, !host.isEmpty else { return "no host" }
+        guard let host = config.host, !host.isEmpty else { return strings.text(.connectionNoHost) }
         return config.port == 80 ? host : "\(host):\(config.port)"
     }
 
@@ -180,9 +186,9 @@ public final class AppCore: @unchecked Sendable {
     /// Validates and trims a port name the way the matrix will. Returns the name to send.
     public func validatePortName(_ raw: String) throws -> String {
         let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { throw CoreError.invalid("Name can't be empty.") }
+        guard !name.isEmpty else { throw CoreError.invalid(strings.text(.errorNameEmpty)) }
         guard name.unicodeScalars.count <= AdminClient.maxNameLength else {
-            throw CoreError.invalid("Name must be \(AdminClient.maxNameLength) characters or fewer.")
+            throw CoreError.invalid(strings.text(.errorNameTooLong, AdminClient.maxNameLength))
         }
         return name
     }
@@ -210,18 +216,18 @@ public final class AppCore: @unchecked Sendable {
     /// connection changed. Throws `CoreError.invalid` with a message ready to show.
     public func saveSettings(_ input: SettingsInput) throws {
         let host = input.host.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !host.isEmpty else { throw CoreError.invalid("Enter the matrix's IP address or hostname.") }
+        guard !host.isEmpty else { throw CoreError.invalid(strings.text(.errorHostRequired)) }
         guard let port = Int(input.port), (1...65535).contains(port) else {
-            throw CoreError.invalid("Port must be a number from 1 to 65535.")
+            throw CoreError.invalid(strings.text(.errorPortRange))
         }
         guard let timeout = Int(input.timeout), timeout >= 1 else {
-            throw CoreError.invalid("Timeout must be at least 1 second.")
+            throw CoreError.invalid(strings.text(.errorTimeoutMin))
         }
         guard let poll = Int(input.pollInterval), poll >= 1 else {
-            throw CoreError.invalid("Poll interval must be at least 1 second.")
+            throw CoreError.invalid(strings.text(.errorPollMin))
         }
         guard let detail = Int(input.detailPollInterval), detail >= 1 else {
-            throw CoreError.invalid("Detail poll interval must be at least 1 second.")
+            throw CoreError.invalid(strings.text(.errorDetailPollMin))
         }
 
         var updated = settings
@@ -234,7 +240,7 @@ public final class AppCore: @unchecked Sendable {
             }
             try updated.save(to: settingsURL)
         } catch {
-            throw CoreError.failed("Couldn't save: \(error.localizedDescription)")
+            throw CoreError.failed(strings.text(.errorSaveFailed, error.localizedDescription))
         }
 
         let connectionChanged = updated.matrix != settings.matrix || passwordChanged
@@ -246,13 +252,22 @@ public final class AppCore: @unchecked Sendable {
         do {
             try secrets.setSecret(nil, for: Self.adminAccount)
         } catch {
-            throw CoreError.failed("Couldn't remove the password: \(error.localizedDescription)")
+            throw CoreError.failed(strings.text(.errorRemovePasswordFailed, error.localizedDescription))
         }
         reconfigureStore()
     }
 
     public func setAppearance(_ appearance: Appearance) {
         mutateSettings { $0.appearance = appearance }
+        persist()
+    }
+
+    /// `code` is a language code from `Languages.all`, or `Languages.systemSetting`.
+    public func setLanguage(_ code: String) throws {
+        guard code == Languages.systemSetting || Languages.all.contains(where: { $0.code == code }) else {
+            throw CoreError.invalid("Unknown language \"\(code)\"")
+        }
+        mutateSettings { $0.language = code }
         persist()
     }
 

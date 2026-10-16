@@ -10,6 +10,8 @@ public struct CoreSnapshot: Codable, Equatable, Sendable {
         public var appearance: String
         public var highlightGrid: Bool
         public var showStatusBar: Bool
+        /// The saved choice: a language code, or "system".
+        public var language: String
         public var host: String?
         public var port: Int
         public var timeout: Int
@@ -45,6 +47,12 @@ public struct CoreSnapshot: Codable, Equatable, Sendable {
         public var firmwareVersion: String?
     }
 
+    public struct LanguageSnapshot: Codable, Equatable, Sendable {
+        public var code: String
+        /// The language's own name for itself.
+        public var name: String
+    }
+
     public struct EdidSnapshot: Codable, Equatable, Sendable {
         public var id: Int
         public var name: String
@@ -65,6 +73,10 @@ public struct CoreSnapshot: Codable, Equatable, Sendable {
     public var summary: String
     public var hostLabel: String
     public var adminConfigured: Bool
+    /// Code of the language in force (the saved choice, or the OS's when that is "system").
+    public var language: String
+    /// Every available language, for a picker.
+    public var languages: [LanguageSnapshot]
     public var settings: SettingsSnapshot
     public var inputs: [PortSnapshot]
     public var outputs: [PortSnapshot]
@@ -79,10 +91,13 @@ public struct CoreSnapshot: Codable, Equatable, Sendable {
 
 extension CoreSnapshot {
     public init(core: AppCore) {
-        self.init(update: core.update, summary: core.connectionSummary, hostLabel: core.hostLabel, edidProfiles: core.edidProfiles())
+        self.init(
+            update: core.update, summary: core.connectionSummary, hostLabel: core.hostLabel,
+            edidProfiles: core.edidProfiles(), strings: core.strings
+        )
     }
 
-    public init(update: CoreUpdate, summary: String, hostLabel: String, edidProfiles: [EdidProfile]) {
+    public init(update: CoreUpdate, summary: String, hostLabel: String, edidProfiles: [EdidProfile], strings: Strings) {
         var detail: String?
         if case .disconnected(let reason) = update.phase { detail = reason }
         let state = update.state
@@ -98,14 +113,14 @@ extension CoreSnapshot {
                 name: port.name,
                 type: port.type,
                 status: port.status.rawValue,
-                statusLabel: port.status.label,
+                statusLabel: Presentation.statusLabel(port.status, strings),
                 receiveFrom: port.receiveFrom,
                 sourceName: port.mode == .output
-                    ? port.receiveFrom.map { bay in state.inputs.first { $0.bay == bay }?.name ?? "Input \(bay + 1)" }
+                    ? port.receiveFrom.map { bay in state.inputs.first { $0.bay == bay }?.name ?? strings.text(.portDefaultInputName, bay + 1) }
                     : nil,
                 updateAvailable: outputDetails?.firmwareVersionAvailable == true,
                 edidProfile: edid,
-                details: Presentation.portRows(port, in: state)
+                details: Presentation.portRows(port, in: state, strings)
             )
         }
 
@@ -120,10 +135,13 @@ extension CoreSnapshot {
             summary: summary,
             hostLabel: hostLabel,
             adminConfigured: update.adminConfigured,
+            language: strings.language.code,
+            languages: Languages.all.map { LanguageSnapshot(code: $0.code, name: $0.nativeName) },
             settings: SettingsSnapshot(
                 appearance: update.settings.appearance.rawValue,
                 highlightGrid: update.settings.highlightGrid,
                 showStatusBar: update.settings.showStatusBar,
+                language: update.settings.language,
                 host: matrix.host,
                 port: matrix.port,
                 timeout: matrix.timeout,
@@ -132,8 +150,8 @@ extension CoreSnapshot {
             ),
             inputs: state.map { s in s.inputs.map { snapshot($0, in: s) } } ?? [],
             outputs: state.map { s in s.outputs.map { snapshot($0, in: s) } } ?? [],
-            systemRows: state?.system.map(Presentation.systemRows) ?? [],
-            featureRows: state?.system.map { Presentation.featureRows($0.features) } ?? [],
+            systemRows: state?.system.map { Presentation.systemRows($0, strings) } ?? [],
+            featureRows: state?.system.map { Presentation.featureRows($0.features, strings) } ?? [],
             model: state?.system?.details.model,
             firmware: state?.system?.details.version,
             frontPanel: frontPanel,

@@ -6,8 +6,8 @@ import PulseEightKit
 /// `{"ok":true}` (with an optional `"value"`) or `{"ok":false,"error":"message"}`.
 ///
 /// Commands: route, renamePort, setEdid, setBacklight, setStatusLed, retry, reconnect,
-/// saveSettings, removeAdminPassword, setAppearance, setHighlightGrid, setShowStatusBar,
-/// validatePortName. See `docs/core-interface.md` for the fields of each.
+/// saveSettings, removeAdminPassword, setAppearance, setLanguage, strings, setHighlightGrid,
+/// setShowStatusBar, validatePortName. See `docs/core-interface.md` for the fields of each.
 extension AppCore {
     public func handle(requestJSON: String) async -> String {
         guard let data = requestJSON.data(using: .utf8),
@@ -49,6 +49,15 @@ extension AppCore {
                     throw CoreError.invalid("value must be system, light or dark")
                 }
                 setAppearance(value)
+            case "setLanguage":
+                try setLanguage(try string(object, "value"))
+            case "strings":
+                // The whole text table for the language in force, as a JSON object in "value".
+                let table = strings.allText
+                guard let data = try? JSONSerialization.data(withJSONObject: table, options: [.sortedKeys]),
+                      let text = String(data: data, encoding: .utf8)
+                else { throw CoreError.failed("Couldn't encode the strings") }
+                return Self.success(value: text)
             case "setHighlightGrid":
                 setHighlightGrid(try bool(object, "on"))
             case "setShowStatusBar":
@@ -60,6 +69,7 @@ extension AppCore {
             }
             return Self.success()
         } catch {
+            if case CoreError.notStarted = error { return Self.failure(strings.text(.errorNotStarted)) }
             return Self.failure((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
         }
     }

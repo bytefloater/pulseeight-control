@@ -33,6 +33,10 @@
         func install(model: AppModel) async {
             guard self.model == nil else { return }
             self.model = model
+            model.openSettingsWindow = { [weak model] in
+                guard let model else { return }
+                NativeSettings.show(model: model)
+            }
             NSWindow.allowsAutomaticWindowTabbing = false
 
             // SwiftCrossUI creates the window after the first view appears; wait for it.
@@ -59,25 +63,6 @@
             try? await Task.sleep(nanoseconds: 300_000_000)
             installMenus()
             sync()
-        }
-
-        /// The Settings window: full-height sidebar under transparent window controls, fixed size,
-        /// like System Settings. Waits for SwiftCrossUI to create the window.
-        func configureSettingsWindow() async {
-            for _ in 0..<60 {
-                if let window = NSApp.windows.first(where: { $0.title == "Settings" }) {
-                    window.styleMask.insert(.fullSizeContentView)
-                    window.styleMask.remove(.resizable)
-                    window.titlebarAppearsTransparent = true
-                    window.titleVisibility = .hidden
-                    window.isMovableByWindowBackground = true
-                    window.tabbingMode = .disallowed
-                    // Fixed size, whatever frame AppKit restored.
-                    window.setContentSize(NSSize(width: CGFloat(SettingsWindow.width), height: CGFloat(SettingsWindow.height)))
-                    return
-                }
-                try? await Task.sleep(nanoseconds: 50_000_000)
-            }
         }
 
         /// Pushes model state into the window: selected tab, subtitle, firmware badge.

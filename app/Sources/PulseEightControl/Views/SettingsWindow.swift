@@ -23,6 +23,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
     }
 }
 
+#if !os(macOS)
 /// The Settings window: an icon sidebar and grouped sections, in the style of System Settings.
 struct SettingsWindow: View {
     @Bindable var model: AppModel
@@ -39,9 +40,6 @@ struct SettingsWindow: View {
         }
         .frame(width: Self.width, height: Self.height)
         .onAppear { model.resetDraft() }
-        #if os(macOS)
-            .task { await MacChrome.shared.configureSettingsWindow() }
-        #endif
     }
 
     // MARK: Sidebar
@@ -245,3 +243,4 @@ struct SettingsRow<Content: View>: View {
         .padding(.vertical, 10)
     }
 }
+#endif

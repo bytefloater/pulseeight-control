@@ -98,7 +98,7 @@ struct RoutingPage: View {
         let highlight = model.settings.highlightGrid
         return VStack(alignment: .leading, spacing: GridStyle.gap) {
             HStack(spacing: GridStyle.gap) {
-                Text("").frame(width: GridStyle.rowHeaderWidth - GridStyle.gap, height: headerHeight - GridStyle.gap)
+                Text("").frame(width: Double(GridStyle.rowHeaderWidth - GridStyle.gap), height: Double(headerHeight - GridStyle.gap))
                 ForEach(inputs) { input in
                     ColumnHeaderTile(
                         relay: relay,
@@ -159,10 +159,10 @@ struct ColumnHeaderTile: View {
         let _ = relay.register(.columnHeader(input: port.bay)) { [binding = $highlighted] in binding.wrappedValue = $0 }
         VStack(spacing: 8) {
             RotatedLabel(text: port.name)
-                .frame(height: height - 44, alignment: .bottom)
+                .frame(height: Double(height - 44), alignment: .bottom)
             StatusDot(status: port.status)
         }
-        .frame(width: GridStyle.pitch - GridStyle.gap, height: height - GridStyle.gap)
+        .frame(width: Double(GridStyle.pitch - GridStyle.gap), height: Double(height - GridStyle.gap))
         .background(highlighted ? GridStyle.highlightFill : GridStyle.idleFill)
         .cornerRadius(4)
         .onHover(perform: onHover)
@@ -186,7 +186,7 @@ struct RowHeaderTile: View {
             StatusDot(status: port.status)
         }
         .padding(.horizontal, 8)
-        .frame(width: GridStyle.rowHeaderWidth - GridStyle.gap, height: GridStyle.pitch - GridStyle.gap, alignment: .trailing)
+        .frame(width: Double(GridStyle.rowHeaderWidth - GridStyle.gap), height: Double(GridStyle.pitch - GridStyle.gap), alignment: .trailing)
         .background(highlighted ? GridStyle.highlightFill : GridStyle.idleFill)
         .cornerRadius(4)
         .onHover(perform: onHover)
@@ -215,7 +215,7 @@ struct GridCell: View {
         // overlay view to swallow clicks. onTapGesture has to be outermost or it never fires.
         Text(active || pending ? "●" : "")
             .foregroundColor(Color.white)
-            .frame(width: GridStyle.pitch - GridStyle.gap, height: GridStyle.pitch - GridStyle.gap)
+            .frame(width: Double(GridStyle.pitch - GridStyle.gap), height: Double(GridStyle.pitch - GridStyle.gap))
             .background(fill)
             .cornerRadius(4)
             .onHover(perform: onHover)

@@ -21,6 +21,6 @@ struct StatusDot: View {
     var body: some View {
         Circle()
             .foregroundColor(status.color)
-            .frame(width: size, height: size)
+            .frame(width: Double(size), height: Double(size))
     }
 }

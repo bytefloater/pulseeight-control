@@ -169,9 +169,9 @@ struct HardwarePage: View {
     @ViewBuilder
     func portRowCell(_ text: String, width: Int, header: Bool) -> some View {
         if header {
-            Text(text).foregroundColor(Color.gray).frame(width: width, alignment: .leading)
+            Text(text).foregroundColor(Color.gray).frame(width: Double(width), alignment: .leading)
         } else {
-            Text(text).frame(width: width, alignment: .leading)
+            Text(text).frame(width: Double(width), alignment: .leading)
         }
     }
 

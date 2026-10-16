@@ -38,7 +38,7 @@ struct SettingsWindow: View {
             Divider()
             detail
         }
-        .frame(width: Self.width, height: Self.height)
+        .frame(width: Double(Self.width), height: Double(Self.height))
         .onAppear { model.resetDraft() }
     }
 
@@ -55,7 +55,7 @@ struct SettingsWindow: View {
             Spacer()
         }
         .padding(.horizontal, 10)
-        .frame(width: Self.sidebarWidth, height: Self.height, alignment: .topLeading)
+        .frame(width: Double(Self.sidebarWidth), height: Double(Self.height), alignment: .topLeading)
         .background(Color.gray.opacity(0.08))
     }
 
@@ -74,7 +74,7 @@ struct SettingsWindow: View {
         .padding(.horizontal, 24)
         .padding(.top, 24)
         .padding(.bottom, 20)
-        .frame(width: Self.width - Self.sidebarWidth - 1, height: Self.height, alignment: .topLeading)
+        .frame(width: Double(Self.width - Self.sidebarWidth - 1), height: Double(Self.height), alignment: .topLeading)
     }
 
     var matrixPane: some View {

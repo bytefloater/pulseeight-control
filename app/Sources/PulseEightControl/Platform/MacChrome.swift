@@ -67,7 +67,7 @@
 
         /// Pushes model state into the window: selected tab, subtitle, firmware badge.
         func sync() {
-            guard let model, let toolbar, let window else { return }
+            guard let model, let toolbar, window != nil else { return }
             if NSApp.mainMenu !== menuBar { installMenus() }
             if let page = model.page {
                 toolbar.selectedItemIdentifier = NSToolbarItem.Identifier(page.rawValue)
@@ -229,7 +229,7 @@
             bar.addItem(menu(name, [
                 item("About \(name)", selector: #selector(NSApplication.orderFrontStandardAboutPanel(_:))),
                 .separator(),
-                item("Settings…", ",") { [weak self] in self?.model?.openSettings() },
+                item("Settings…", ",", handler: { [weak self] in self?.model?.openSettings() }),
                 .separator(),
                 servicesItem,
                 .separator(),
@@ -243,8 +243,9 @@
                 item("Close", "w", selector: #selector(NSWindow.performClose(_:))),
                 .separator(),
                 item("Open Matrix Web Interface", "o", [.command, .shift],
-                     state: { [weak self] in (false, self?.hasHost == true) }) { [weak self] in self?.openWebInterface() },
-                item("Show Settings Folder in Finder") { [weak self] in self?.showSettingsFolder() },
+                     state: { [weak self] in (false, self?.hasHost == true) },
+                     handler: { [weak self] in self?.openWebInterface() }),
+                item("Show Settings Folder in Finder", handler: { [weak self] in self?.showSettingsFolder() }),
             ], dynamic: true))
             bar.addItem(menu("Edit", [
                 item("Undo", "z", selector: Selector(("undo:"))),

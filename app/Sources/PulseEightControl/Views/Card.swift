@@ -22,7 +22,7 @@ struct FormSection<Content: View>: View {
 
 /// A label with a right-aligned caption and a control, the macOS settings idiom.
 struct FormRow<Content: View>: View {
-    static var labelWidth: Int { 190 }
+    static var labelWidth: Double { 190 }
 
     var label: String
     var content: Content

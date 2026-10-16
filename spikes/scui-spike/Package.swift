@@ -14,6 +14,7 @@ let package = Package(
             dependencies: [
                 .product(name: "SwiftCrossUI", package: "swift-cross-ui"),
                 .product(name: "DefaultBackend", package: "swift-cross-ui"),
+                .product(name: "AppKitBackend", package: "swift-cross-ui", condition: .when(platforms: [.macOS])),
             ]
         ),
     ]

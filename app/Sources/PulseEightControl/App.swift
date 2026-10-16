@@ -1,6 +1,11 @@
 import DefaultBackend
 import SwiftCrossUI
 
+#if os(macOS)
+    // The @main expansion uses AppKitBackend's feature conformances.
+    import AppKitBackend
+#endif
+
 @main
 struct PulseEightControlApp: App {
     @State var model = AppModel()

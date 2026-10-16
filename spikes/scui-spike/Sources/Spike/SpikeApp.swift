@@ -1,4 +1,8 @@
 import DefaultBackend
+
+#if os(macOS)
+    import AppKitBackend
+#endif
 import Foundation
 import SwiftCrossUI
 

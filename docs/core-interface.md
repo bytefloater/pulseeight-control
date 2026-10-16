@@ -6,7 +6,8 @@ phase, validation, and every command. Each app draws its own native UI on top.
 
 * **macOS** links `PulseEightCore` directly and uses the typed Swift API (`AppCore`).
 * **Windows** loads `pulseeight_core.dll` (built from `PulseEightCoreExports`) and talks JSON
-  through the C functions in `swift/include/pulseeight_core.h`.
+  through the C functions in `swift/include/pulseeight_core.h`, via the C# wrapper in
+  `windows/PulseEight.Core` (`CoreClient`).
 
 `tools/core_smoke.py` exercises the C interface end to end from outside Swift (ctypes), and is
 the executable reference for how a client uses it.

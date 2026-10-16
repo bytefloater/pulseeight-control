@@ -14,3 +14,10 @@ scripts/windows/tools/
 xcuserdata/
 *.xcuserstate
 xcshareddata/
+
+# .NET
+bin/
+obj/
+
+# staged native libraries for the Windows app
+windows/native/

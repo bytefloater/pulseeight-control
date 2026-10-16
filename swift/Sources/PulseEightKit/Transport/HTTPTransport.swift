@@ -37,10 +37,13 @@ public protocol HTTPTransport: Sendable {
 public struct TransportError: Error, Sendable, CustomStringConvertible {
     public var description: String
     public var isTimeout: Bool
+    /// The connection was dropped before a response arrived (worth retrying).
+    public var isConnectionDrop: Bool
 
-    public init(_ description: String, isTimeout: Bool = false) {
+    public init(_ description: String, isTimeout: Bool = false, isConnectionDrop: Bool = false) {
         self.description = description
         self.isTimeout = isTimeout
+        self.isConnectionDrop = isConnectionDrop
     }
 }
 
@@ -77,4 +80,13 @@ public struct URLSessionTransport: HTTPTransport {
             }.resume()
         }
     }
+}
+
+/// The transport the apps use: WinHTTP on Windows (URLSession proved unstable there), URLSession elsewhere.
+public func makeDefaultTransport(timeout: TimeInterval) -> HTTPTransport {
+    #if os(Windows)
+    WinHTTPTransport(timeout: timeout)
+    #else
+    URLSessionTransport(timeout: timeout)
+    #endif
 }

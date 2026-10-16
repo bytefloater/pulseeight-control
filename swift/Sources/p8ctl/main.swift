@@ -54,7 +54,7 @@ guard let host, !host.isEmpty else { fail("No host: pass --host or set P8_HOST")
 
 let client: MatrixClient
 do {
-    client = try MatrixClient(host: host, port: port, transport: URLSessionTransport(timeout: TimeInterval(timeout)))
+    client = try MatrixClient(host: host, port: port, transport: makeDefaultTransport(timeout: TimeInterval(timeout)))
 } catch {
     fail("\(error.localizedDescription)")
 }

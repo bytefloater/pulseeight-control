@@ -89,7 +89,7 @@ public final class AppCore: @unchecked Sendable {
     public init(
         secrets: SecretStore = SecretStores.makeDefault(),
         settingsURL: URL = ConfigPaths.settingsFile,
-        makeTransport: @escaping @Sendable (TimeInterval) -> HTTPTransport = { URLSessionTransport(timeout: $0) },
+        makeTransport: @escaping @Sendable (TimeInterval) -> HTTPTransport = { makeDefaultTransport(timeout: $0) },
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.secrets = secrets

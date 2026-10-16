@@ -91,7 +91,7 @@ public actor MatrixStore {
     public init(
         config: MatrixConfig,
         adminPassword: String? = nil,
-        makeTransport: @escaping @Sendable (TimeInterval) -> HTTPTransport = { URLSessionTransport(timeout: $0) },
+        makeTransport: @escaping @Sendable (TimeInterval) -> HTTPTransport = { makeDefaultTransport(timeout: $0) },
         now: @escaping @Sendable () -> Date = { Date() },
         onChange: @escaping Handler
     ) {

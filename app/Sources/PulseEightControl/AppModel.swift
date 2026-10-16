@@ -67,8 +67,14 @@ struct SettingsDraft: Equatable {
 final class AppModel {
     static let adminAccount = "admin-password"
 
-    /// nil until the store has published for the first time.
+    /// nil until the store has published for the first time. Changes on every poll (it carries
+    /// timestamps), so views that don't need that should read `ports` instead.
     var state: MatrixState?
+    /// Just the port list, assigned only when it actually changes. The routing grid reads this so
+    /// a routine poll doesn't rebuild ~270 views.
+    var ports: [MatrixPort] = []
+    /// Firmware updates available; stored for the same reason as `ports` (the window chrome reads it).
+    private(set) var updateCount = 0
     var settings: AppSettings
     var draft: SettingsDraft
     var page: Page? = .routing
@@ -97,12 +103,21 @@ final class AppModel {
         self.settings = settings
         self.draft = SettingsDraft(settings)
         if settings.matrix.host?.isEmpty != false { page = .settings }
+        refreshPhase()
     }
 
     // MARK: Derived state
 
-    var phase: ConnectionPhase {
-        guard let status = state?.status else {
+    /// Stored (not derived) so views that only need to know "connected or not" don't re-run on every poll.
+    private(set) var phase: ConnectionPhase = .notConfigured
+
+    private func refreshPhase() {
+        let next = computePhase()
+        if next != phase { phase = next }
+    }
+
+    private func computePhase() -> ConnectionPhase {
+        guard let status = latestState?.status else {
             return settings.matrix.host?.isEmpty == false ? .connecting : .notConfigured
         }
         if !status.configured { return .notConfigured }
@@ -135,7 +150,7 @@ final class AppModel {
 
     /// Changes whenever something the native window chrome shows changes.
     var chromeSignature: String {
-        "\(page?.rawValue ?? "")|\(connectionShort)|\(state?.updates.count ?? 0)"
+        "\(page?.rawValue ?? "")|\(updateCount)"
     }
 
     var hostLabel: String {
@@ -143,13 +158,38 @@ final class AppModel {
         return settings.matrix.port == 80 ? host : "\(host):\(settings.matrix.port)"
     }
 
+    /// Newest state from the store, including per-poll timestamps. Not observed.
+    private var latestState: MatrixState?
+    /// The last state published to views, with the per-poll timestamps blanked.
+    private var publishedKey: MatrixState?
+
+    /// Quiet polls (nothing but timestamps changed) publish nothing, so they trigger no view
+    /// updates at all. In SwiftCrossUI a changed observed value can ripple up through every
+    /// ancestor's body, which for the routing grid means ~270 views rebuilt on each poll.
+    private func apply(_ newState: MatrixState) {
+        latestState = newState
+        var key = newState
+        key.status.lastPollTime = nil
+        key.status.cacheAge = nil
+        if key != publishedKey {
+            publishedKey = key
+            state = newState
+        }
+        if newState.ports != ports { ports = newState.ports }
+        if newState.updates.count != updateCount { updateCount = newState.updates.count }
+        refreshPhase()
+    }
+
+    var inputs: [MatrixPort] { ports.filter { $0.mode == .input }.sorted { $0.bay < $1.bay } }
+    var outputs: [MatrixPort] { ports.filter { $0.mode == .output }.sorted { $0.bay < $1.bay } }
+
     // MARK: Lifecycle
 
     func start() async {
         guard store == nil else { return }
         let password = (try? secrets.secret(for: Self.adminAccount)) ?? nil
         let store = MatrixStore(config: settings.matrix, adminPassword: password) { [weak self] state in
-            Task { @MainActor in self?.state = state }
+            Task { @MainActor in self?.apply(state) }
         }
         self.store = store
         await store.start()
@@ -262,6 +302,23 @@ final class AppModel {
         }
     }
 
+    // MARK: View preferences
+
+    func setHighlightGrid(_ on: Bool) {
+        settings.highlightGrid = on
+        try? settings.save()
+    }
+
+    func setShowStatusBar(_ on: Bool) {
+        settings.showStatusBar = on
+        try? settings.save()
+    }
+
+    /// Drop the connection and start again from the saved settings.
+    func reconnect() {
+        reconfigureStore()
+    }
+
     func openSettings() {
         page = .settings
     }
@@ -294,6 +351,7 @@ final class AppModel {
 
         let connectionChanged = updated.matrix != settings.matrix || !draft.adminPassword.isEmpty
         settings = updated
+        refreshPhase()
         draft.host = host
         draft.adminPassword = ""
         settingsMessage = ("Saved.", false)

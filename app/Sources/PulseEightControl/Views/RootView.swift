@@ -5,9 +5,11 @@ struct RootView: View {
 
     var body: some View {
         #if os(macOS)
-            // The page switcher is a native preferences-style toolbar (see MacChrome), and the
-            // connection state lives in the window subtitle, so the view is just the page.
-            content
+            // The page switcher is a native preferences-style toolbar (see MacChrome).
+            VStack(spacing: 0) {
+                content
+                if model.settings.showStatusBar { StatusBar(model: model) }
+            }
                 .sheet(isPresented: sheetBinding) {
                     PortDetailSheet(model: model)
                 }
@@ -23,8 +25,7 @@ struct RootView: View {
             } detail: {
                 VStack(spacing: 0) {
                     content
-                    Divider()
-                    ConnectionFooter(model: model)
+                    if model.settings.showStatusBar { StatusBar(model: model) }
                 }
             }
             .sheet(isPresented: sheetBinding) {

@@ -1,25 +1,47 @@
 import PulseEightKit
 import SwiftCrossUI
 
-/// Window footer: one line of connection state.
-struct ConnectionFooter: View {
+/// Bottom status bar: connection first, then whatever else is worth knowing, each item
+/// separated by a divider.
+struct StatusBar: View {
     var model: AppModel
 
     var body: some View {
-        HStack(spacing: 8) {
-            Circle()
-                .foregroundColor(dotColor)
-                .frame(width: 10, height: 10)
-            Text(label)
-            Spacer()
-            if let count = model.state?.updates.count, count > 0 {
-                Button("\(count) firmware update\(count == 1 ? "" : "s") available") { model.page = .hardware }
+        let items = statusItems
+        VStack(spacing: 0) {
+            Divider()
+            HStack(spacing: 10) {
+                ForEach(items) { item in
+                    if item.id != items.first?.id {
+                        Divider().frame(height: 14)
+                    }
+                    itemView(item)
+                }
+                Spacer()
             }
-            if model.adminConfigured {
-                Text("Admin enabled")
-            }
+            .font(.callout)
+            .padding(.horizontal, 12)
+            .frame(height: 32)
         }
-        .padding(8)
+        // Size must not depend on content: a size change in a child makes SwiftCrossUI re-run
+        // every ancestor's body, which would rebuild the routing grid on each poll.
+        .frame(maxWidth: .infinity)
+        .frame(height: 33)
+    }
+
+    @ViewBuilder
+    func itemView(_ item: StatusItem) -> some View {
+        switch item.kind {
+        case .connection:
+            HStack(spacing: 6) {
+                Circle().foregroundColor(dotColor).frame(width: 9, height: 9)
+                Text(model.connectionSummary)
+            }
+        case .updates:
+            Button(item.text) { model.page = .hardware }
+        case .text:
+            Text(item.text)
+        }
     }
 
     var dotColor: Color {
@@ -31,7 +53,29 @@ struct ConnectionFooter: View {
         }
     }
 
-    var label: String { model.connectionSummary }
+    var statusItems: [StatusItem] {
+        var items = [StatusItem(id: "connection", kind: .connection, text: "")]
+        if model.adminConfigured {
+            items.append(StatusItem(id: "admin", kind: .text, text: "Admin enabled"))
+        }
+        if let count = model.state?.updates.count, count > 0 {
+            items.append(StatusItem(id: "updates", kind: .updates, text: "\(count) firmware update\(count == 1 ? "" : "s") available"))
+        }
+        if let system = model.state?.system {
+            items.append(StatusItem(id: "model", kind: .text, text: "\(system.details.model) \(system.details.version)"))
+        }
+        if let state = model.state, !state.ports.isEmpty {
+            items.append(StatusItem(id: "ports", kind: .text, text: "\(state.inputs.count) in, \(state.outputs.count) out"))
+        }
+        return items
+    }
+}
+
+struct StatusItem: Identifiable {
+    enum Kind { case connection, updates, text }
+    var id: String
+    var kind: Kind
+    var text: String
 }
 
 /// Replaces a page's content while the matrix is unreachable. The old web UI used a modal here;

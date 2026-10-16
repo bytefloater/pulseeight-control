@@ -12,6 +12,9 @@ enum Appearance: String, Codable, CaseIterable, CustomStringConvertible {
 struct AppSettings: Codable, Equatable {
     var matrix = MatrixConfig()
     var appearance: Appearance = .system
+    /// Row/column highlight under the pointer in the routing grid.
+    var highlightGrid = true
+    var showStatusBar = true
 
     init() {}
 
@@ -19,6 +22,8 @@ struct AppSettings: Codable, Equatable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         matrix = try c.decodeIfPresent(MatrixConfig.self, forKey: .matrix) ?? MatrixConfig()
         appearance = try c.decodeIfPresent(Appearance.self, forKey: .appearance) ?? .system
+        highlightGrid = try c.decodeIfPresent(Bool.self, forKey: .highlightGrid) ?? true
+        showStatusBar = try c.decodeIfPresent(Bool.self, forKey: .showStatusBar) ?? true
     }
 
     static func load() -> AppSettings {

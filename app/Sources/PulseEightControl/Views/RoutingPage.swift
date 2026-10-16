@@ -51,7 +51,10 @@ final class HoverRelay {
 }
 
 enum GridStyle {
+    /// Tiles are `pitch - gap` square and separated by `gap` (stack spacing, not per-tile padding:
+    /// every wrapper is another AppKit-backed node, and the page is built on each tab switch).
     static let pitch = 28
+    static let gap = 4
     static let rowHeaderWidth = 156
     static let idleFill = Color.gray.opacity(0.12)
     /// Row and column under the pointer. Status colours (blue, orange, dots) are left alone.
@@ -93,9 +96,9 @@ struct RoutingPage: View {
 
     func grid(inputs: [MatrixPort], outputs: [MatrixPort], headerHeight: Int) -> some View {
         let highlight = model.settings.highlightGrid
-        return VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 0) {
-                Text("").frame(width: GridStyle.rowHeaderWidth, height: headerHeight)
+        return VStack(alignment: .leading, spacing: GridStyle.gap) {
+            HStack(spacing: GridStyle.gap) {
+                Text("").frame(width: GridStyle.rowHeaderWidth - GridStyle.gap, height: headerHeight - GridStyle.gap)
                 ForEach(inputs) { input in
                     ColumnHeaderTile(
                         relay: relay,
@@ -107,7 +110,7 @@ struct RoutingPage: View {
                 }
             }
             ForEach(outputs) { output in
-                HStack(spacing: 0) {
+                HStack(spacing: GridStyle.gap) {
                     RowHeaderTile(
                         relay: relay,
                         port: output,
@@ -121,7 +124,6 @@ struct RoutingPage: View {
                             output: output.bay,
                             active: output.receiveFrom == input.bay,
                             pending: model.pendingRoutes.contains(RouteKey(input: input.bay, output: output.bay)),
-                            tooltip: "\(input.name) → \(output.name)",
                             onHover: { setHover($0, input: input.bay, output: output.bay, enabled: highlight) },
                             onTap: { model.route(input: input.bay, output: output.bay) }
                         )
@@ -160,10 +162,9 @@ struct ColumnHeaderTile: View {
                 .frame(height: height - 44, alignment: .bottom)
             StatusDot(status: port.status)
         }
-        .frame(width: GridStyle.pitch - 4, height: height - 4)
+        .frame(width: GridStyle.pitch - GridStyle.gap, height: height - GridStyle.gap)
         .background(highlighted ? GridStyle.highlightFill : GridStyle.idleFill)
         .cornerRadius(4)
-        .padding(2)
         .onHover(perform: onHover)
         .help("\(port.name): \(port.status.label). Click for details")
         .onTapGesture(perform: onTap)
@@ -185,10 +186,9 @@ struct RowHeaderTile: View {
             StatusDot(status: port.status)
         }
         .padding(.horizontal, 8)
-        .frame(width: GridStyle.rowHeaderWidth - 4, height: GridStyle.pitch - 4, alignment: .trailing)
+        .frame(width: GridStyle.rowHeaderWidth - GridStyle.gap, height: GridStyle.pitch - GridStyle.gap, alignment: .trailing)
         .background(highlighted ? GridStyle.highlightFill : GridStyle.idleFill)
         .cornerRadius(4)
-        .padding(2)
         .onHover(perform: onHover)
         .help("\(port.name): \(port.status.label). Click for details")
         .onTapGesture(perform: onTap)
@@ -201,7 +201,6 @@ struct GridCell: View {
     var output: Int
     var active: Bool
     var pending: Bool
-    var tooltip: String
     var onHover: (Bool) -> Void
     var onTap: () -> Void
 
@@ -209,17 +208,17 @@ struct GridCell: View {
 
     var body: some View {
         let _ = relay.register(.cell(input: input, output: output)) { [binding = $highlighted] in binding.wrappedValue = $0 }
+        // No per-cell tooltip: it is one more view per cell, and the highlighted row and column
+        // headers already name the input and output.
         // Text + background rather than Button (clips its label at this size) or Rectangle
         // (taps didn't fire in the spike). The marker is the Text's own content so there is no
         // overlay view to swallow clicks. onTapGesture has to be outermost or it never fires.
         Text(active || pending ? "●" : "")
             .foregroundColor(Color.white)
-            .frame(width: GridStyle.pitch - 4, height: GridStyle.pitch - 4)
+            .frame(width: GridStyle.pitch - GridStyle.gap, height: GridStyle.pitch - GridStyle.gap)
             .background(fill)
             .cornerRadius(4)
-            .padding(2)
             .onHover(perform: onHover)
-            .help(tooltip)
             .onTapGesture(perform: onTap)
     }
 

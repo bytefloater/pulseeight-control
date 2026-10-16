@@ -51,19 +51,16 @@ struct RootView: View {
     }
     #endif
 
-    /// Both pages stay mounted and the inactive one is collapsed to nothing.
-    /// Creating a page means building and attaching hundreds of AppKit views, which made every tab
-    /// switch take a noticeable fraction of a second; switching visibility is just a layout change.
+    /// Only the active page exists. An inactive page is fully unloaded, not hidden: collapsing a
+    /// ScrollView doesn't clip it (it keeps its natural width and overflows into the visible page).
     @ViewBuilder
     var content: some View {
         if model.phase != .connected {
             ConnectionPanel(model: model)
+        } else if (model.page ?? .routing) == .routing {
+            RoutingPage(model: model)
         } else {
-            let page = model.page ?? .routing
-            ZStack(alignment: .topLeading) {
-                RoutingPage(model: model).shown(page == .routing)
-                HardwarePage(model: model).shown(page == .hardware)
-            }
+            HardwarePage(model: model)
         }
     }
 
@@ -72,16 +69,5 @@ struct RootView: View {
             get: { model.selectedPort != nil },
             set: { if !$0 { model.selectedPort = nil } }
         )
-    }
-}
-
-extension View {
-    /// Keeps the view in the hierarchy but collapses it to nothing. The pages scroll inside an
-    /// NSScrollView, which clips to its (now zero) bounds, so nothing draws or takes clicks.
-    ///
-    /// Only the width collapses. Collapsing the height too left the scroll view anchored at the
-    /// bottom of its content when it came back, because the vertical geometry changed under it.
-    func shown(_ visible: Bool) -> some View {
-        frame(width: visible ? nil : Double(0))
     }
 }

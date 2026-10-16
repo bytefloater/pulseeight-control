@@ -29,7 +29,7 @@ struct PulseEightControlApp: App {
 
     var mainWindow: some Scene {
         WindowGroup("PulseEight Control") {
-            RootView(model: model)
+            DebugRoot(model: model)
                 .preferredColorScheme(colorScheme)
                 .task { await model.start() }
         }

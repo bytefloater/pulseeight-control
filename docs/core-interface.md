@@ -9,7 +9,7 @@ phase, validation, and every command. Each app draws its own native UI on top.
   through the C functions in `PulseEightKit/include/pulseeight_core.h`, via the C# wrapper in
   `PulseEightControl-windows/Core` (`CoreClient`).
 
-`tools/core_smoke.py` exercises the C interface end to end from outside Swift (ctypes), and is
+`PulseEightControl-windows/Core.Tests` exercises the C interface end to end (P/Invoke against the real library and the Swift fake matrix, `PulseEightFakeServer`), and is
 the executable reference for how a client uses it.
 
 ## Functions

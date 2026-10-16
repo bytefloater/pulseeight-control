@@ -11,11 +11,11 @@ public sealed class CoreFactAttribute : FactAttribute
     public CoreFactAttribute()
     {
         if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("P8_CORE_LIBRARY")))
-            Skip = "Set P8_CORE_LIBRARY to the built pulseeight_core library (see windows/README.md)";
+            Skip = "Set P8_CORE_LIBRARY to the built pulseeight_core library (see PulseEightControl-windows/README.md)";
     }
 }
 
-/// <summary>Runs tools/fake_matrix.py for the duration of the tests and gives the core a scratch
+/// <summary>Runs the Swift fake matrix (p8fake) for the duration of the tests and gives the core a scratch
 /// settings folder, so nothing touches the real configuration.</summary>
 public sealed class FakeMatrixFixture : IDisposable
 {
@@ -43,21 +43,37 @@ public sealed class FakeMatrixFixture : IDisposable
         SetNativeEnvironment("P8_CONFIG_DIR", scratch);
         SetNativeEnvironment("P8_SECRET_STORE", "file");
 
-        var script = Path.Combine(FindRepositoryRoot(), "tools", "fake_matrix.py");
-        var python = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "python" : "python3";
-        _fake = Process.Start(new ProcessStartInfo(python, $"\"{script}\" --port {Port} --password {Password} --quiet")
+        _fake = Process.Start(new ProcessStartInfo(FindFakeServer(), $"--port {Port} --password {Password} --quiet")
         {
             RedirectStandardOutput = true,
             UseShellExecute = false,
+            CreateNoWindow = true,
         }) ?? throw new InvalidOperationException("Couldn't start the fake matrix");
         _fake.StandardOutput.ReadLine(); // its "listening" line
     }
 
-    private static string FindRepositoryRoot()
+    /// <summary>P8_FAKE_SERVER names the p8fake executable; otherwise the debug build under
+    /// PulseEightFakeServer/.build is used (build it with `swift build` there).</summary>
+    private static string FindFakeServer()
     {
+        var explicitPath = Environment.GetEnvironmentVariable("P8_FAKE_SERVER");
+        if (!string.IsNullOrEmpty(explicitPath)) return explicitPath;
+
+        var name = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "p8fake.exe" : "p8fake";
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory != null; directory = directory.Parent)
-            if (File.Exists(Path.Combine(directory.FullName, "tools", "fake_matrix.py"))) return directory.FullName;
-        throw new DirectoryNotFoundException("Couldn't find tools/fake_matrix.py above " + AppContext.BaseDirectory);
+        {
+            var build = Path.Combine(directory.FullName, "PulseEightFakeServer", ".build");
+            if (!Directory.Exists(build)) continue;
+            // .build/debug on current SwiftPM, .build/<triple>/debug on older ones.
+            var direct = Path.Combine(build, "debug", name);
+            if (File.Exists(direct)) return direct;
+            foreach (var triple in Directory.GetDirectories(build))
+            {
+                var candidate = Path.Combine(triple, "debug", name);
+                if (File.Exists(candidate)) return candidate;
+            }
+        }
+        throw new FileNotFoundException("Couldn't find the p8fake executable. Run `swift build` in PulseEightFakeServer, or set P8_FAKE_SERVER.");
     }
 
     public void Dispose()

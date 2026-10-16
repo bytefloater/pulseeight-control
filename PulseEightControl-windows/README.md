@@ -8,12 +8,12 @@ Swift core in `../PulseEightKit`, loaded as `pulseeight_core.dll` and driven wit
 | Project | What it is |
 |---|---|
 | `Core` (`PulseEight.Core`) | Managed wrapper over the C interface (`CoreClient`, snapshot types). No UI, builds on any OS. |
-| `Core.Tests` | xUnit tests; the end-to-end ones run against the real library and `tools/fake_matrix.py`. |
+| `Core.Tests` | xUnit tests; the end-to-end ones run against the real library and the Swift fake matrix (`PulseEightFakeServer`). |
 | `App` (`PulseEightControl`) | The WinUI 3 app. The interface is built in code; the only XAML is `App.xaml`, which WinUI needs to load its control styles. |
 
 ## Build and run (on Windows)
 
-Needs the Swift toolchain, the .NET 8 (or newer) SDK and Python 3 (only for the tests).
+Needs the Swift toolchain and the .NET 8 (or newer) SDK.
 
 ```powershell
 .\windows\build.ps1 -Run
@@ -23,8 +23,7 @@ That builds `pulseeight_core.dll`, stages it with the Swift runtime DLLs in `win
 builds the app (self-contained: no Windows App Runtime install needed) and starts it. Crashes are
 written to `%LOCALAPPDATA%\PulseEightControl\crash.log`.
 
-To try it without a matrix, run `python tools\fake_matrix.py --port 8080 --password secret` and use
-`127.0.0.1`, port `8080` in Settings.
+To try it without a matrix, run the fake one (`swift run --package-path PulseEightFakeServer p8fake --port 8080 --password secret`)and use `127.0.0.1`, port `8080` in Settings.
 
 ## Tests
 

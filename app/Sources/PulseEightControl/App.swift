@@ -9,6 +9,7 @@ struct PulseEightControlApp: App {
         #if os(macOS)
             // The menu bar is built natively in MacChrome (with real shortcuts).
             mainWindow
+            settingsWindow
         #else
             mainWindow.commands {
                 // No keyboard shortcuts: SwiftCrossUI 0.10 has no public API for them.
@@ -18,7 +19,16 @@ struct PulseEightControlApp: App {
                     Button("Settings") { model.openSettings() }
                 }
             }
+            settingsWindow
         #endif
+    }
+
+    var settingsWindow: some Scene {
+        Window("Settings", id: "settings") {
+            SettingsWindow(model: model)
+                .preferredColorScheme(colorScheme)
+        }
+        .defaultSize(width: SettingsWindow.width, height: SettingsWindow.height)
     }
 
     var mainWindow: some Scene {

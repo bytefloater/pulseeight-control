@@ -2,6 +2,7 @@ import SwiftCrossUI
 
 struct RootView: View {
     @Bindable var model: AppModel
+    @Environment(\.openWindow) var openWindow
 
     var body: some View {
         #if os(macOS)
@@ -14,7 +15,10 @@ struct RootView: View {
                     PortDetailSheet(model: model)
                 }
                 .onChange(of: model.chromeSignature) { MacChrome.shared.sync() }
-                .task { await MacChrome.shared.install(model: model) }
+                .task {
+                    registerSettingsWindow()
+                    await MacChrome.shared.install(model: model)
+                }
         #else
             NavigationSplitView {
                 VStack(spacing: 0) {
@@ -31,15 +35,21 @@ struct RootView: View {
             .sheet(isPresented: sheetBinding) {
                 PortDetailSheet(model: model)
             }
+            .task { registerSettingsWindow() }
         #endif
+    }
+
+    /// Lets the model (and the macOS menu bar) open the Settings window, and opens it straight
+    /// away when there is no matrix to talk to yet.
+    func registerSettingsWindow() {
+        model.openSettingsWindow = { [openWindow] in openWindow(id: "settings") }
+        if model.phase == .notConfigured { model.openSettings() }
     }
 
     @ViewBuilder
     var content: some View {
         let page = model.page ?? .routing
-        if page == .settings {
-            SettingsPage(model: model)
-        } else if model.phase != .connected {
+        if model.phase != .connected {
             ConnectionPanel(model: model)
         } else if page == .routing {
             RoutingPage(model: model)

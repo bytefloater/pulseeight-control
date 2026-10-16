@@ -20,8 +20,9 @@
         private static let symbols: [Page: String] = [
             .routing: "square.grid.3x3",
             .hardware: "cpu",
-            .settings: "gearshape",
         ]
+
+        static let mainWindowTitle = "PulseEight Control"
 
         private static var appName: String {
             (Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String) ?? "PulseEight Control"
@@ -36,7 +37,7 @@
 
             // SwiftCrossUI creates the window after the first view appears; wait for it.
             for _ in 0..<60 {
-                if let found = NSApp.windows.first(where: { $0.canBecomeMain }) {
+                if let found = NSApp.windows.first(where: { $0.title == Self.mainWindowTitle }) {
                     window = found
                     break
                 }
@@ -58,6 +59,25 @@
             try? await Task.sleep(nanoseconds: 300_000_000)
             installMenus()
             sync()
+        }
+
+        /// The Settings window: full-height sidebar under transparent window controls, fixed size,
+        /// like System Settings. Waits for SwiftCrossUI to create the window.
+        func configureSettingsWindow() async {
+            for _ in 0..<60 {
+                if let window = NSApp.windows.first(where: { $0.title == "Settings" }) {
+                    window.styleMask.insert(.fullSizeContentView)
+                    window.styleMask.remove(.resizable)
+                    window.titlebarAppearsTransparent = true
+                    window.titleVisibility = .hidden
+                    window.isMovableByWindowBackground = true
+                    window.tabbingMode = .disallowed
+                    // Fixed size, whatever frame AppKit restored.
+                    window.setContentSize(NSSize(width: CGFloat(SettingsWindow.width), height: CGFloat(SettingsWindow.height)))
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 50_000_000)
+            }
         }
 
         /// Pushes model state into the window: selected tab, subtitle, firmware badge.
@@ -224,7 +244,7 @@
             bar.addItem(menu(name, [
                 item("About \(name)", selector: #selector(NSApplication.orderFrontStandardAboutPanel(_:))),
                 .separator(),
-                item("Settings…", ",") { [weak self] in self?.showPage(.settings) },
+                item("Settings…", ",") { [weak self] in self?.model?.openSettings() },
                 .separator(),
                 servicesItem,
                 .separator(),
@@ -253,7 +273,6 @@
             bar.addItem(menu("View", [
                 pageItem("Routing", "1", .routing),
                 pageItem("Hardware", "2", .hardware),
-                pageItem("Settings", "3", .settings),
                 .separator(),
                 item("Highlight Row and Column", state: { [weak self] in (self?.model?.settings.highlightGrid == true, true) }) {
                     [weak self] in

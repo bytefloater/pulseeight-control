@@ -42,7 +42,12 @@ import SwiftCrossUI
 
         override func draw(_ dirtyRect: NSRect) {
             guard let context = NSGraphicsContext.current?.cgContext else { return }
-            context.translateBy(x: bounds.width, y: 0)
+            // The view can be wider than its intrinsic width, so centre the glyphs' visible
+            // extent (baseline to cap height, ignoring descenders) in the bounds rather than
+            // pinning the line box to an edge. After the quarter turn, text "up" points left.
+            let font = attributes[.font] as! NSFont
+            let baselineX = bounds.width / 2 + font.capHeight / 2
+            context.translateBy(x: baselineX - font.descender, y: 0)
             context.rotate(by: .pi / 2)
             (text as NSString).draw(at: .zero, withAttributes: attributes)
         }

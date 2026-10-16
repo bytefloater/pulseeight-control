@@ -7,7 +7,7 @@ import SwiftCrossUI
 #endif
 
 enum Page: String, CaseIterable, Identifiable, CustomStringConvertible {
-    case routing, hardware, settings
+    case routing, hardware
 
     var id: String { rawValue }
     var description: String { rawValue.capitalized }
@@ -38,7 +38,7 @@ struct PortEditDraft: Equatable {
     var saving = false
 }
 
-/// Text fields in the Settings page, kept as strings until Save validates them.
+/// Text fields in the Settings window, kept as strings until Save validates them.
 struct SettingsDraft: Equatable {
     var host = ""
     var port = "80"
@@ -78,6 +78,9 @@ final class AppModel {
     var settings: AppSettings
     var draft: SettingsDraft
     var page: Page? = .routing
+    var settingsPane: SettingsPane = .matrix
+    /// Set by the main window once it can open windows; opens (or raises) the Settings window.
+    var openSettingsWindow: (() -> Void)?
     /// Result of the last Settings save: (text, isError).
     var settingsMessage: (text: String, isError: Bool)?
     var retrying = false
@@ -102,7 +105,6 @@ final class AppModel {
         self.secrets = secrets
         self.settings = settings
         self.draft = SettingsDraft(settings)
-        if settings.matrix.host?.isEmpty != false { page = .settings }
         refreshPhase()
     }
 
@@ -320,7 +322,13 @@ final class AppModel {
     }
 
     func openSettings() {
-        page = .settings
+        openSettingsWindow?()
+    }
+
+    /// Discards unsaved edits; called each time the Settings window opens.
+    func resetDraft() {
+        draft = SettingsDraft(settings)
+        settingsMessage = nil
     }
 
     func saveSettings() {

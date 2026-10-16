@@ -1,16 +1,16 @@
 // swift-tools-version:5.10
 import PackageDescription
 
-// The macOS app. Its logic lives in ../swift (PulseEightKit for the device, PulseEightCore for
+// The macOS app. Its logic lives in ../PulseEightKit (PulseEightKit for the device, PulseEightCore for
 // settings, connection and commands), shared with the Windows app; this package is only the macOS
-// UI. It is a separate package from ../swift so `swift test` on the shared code never pulls in
+// UI. It is a separate package from ../PulseEightKit so `swift test` on the shared code never pulls in
 // SwiftCrossUI.
 let package = Package(
     name: "PulseEightControlApp",
     platforms: [.macOS(.v14)],
     dependencies: [
         .package(url: "https://github.com/moreSwift/swift-cross-ui", .upToNextMinor(from: "0.10.0")),
-        .package(path: "../swift"),
+        .package(path: "../PulseEightKit"),
     ],
     targets: [
         .executableTarget(
@@ -20,8 +20,8 @@ let package = Package(
                 // The macOS backend directly (not DefaultBackend, which also lists the Windows
                 // and GTK ones); also used to embed AppKit views (rotated grid labels).
                 .product(name: "AppKitBackend", package: "swift-cross-ui"),
-                .product(name: "PulseEightKit", package: "swift"),
-                .product(name: "PulseEightCore", package: "swift"),
+                .product(name: "PulseEightKit", package: "PulseEightKit"),
+                .product(name: "PulseEightCore", package: "PulseEightKit"),
             ],
             linkerSettings: [
                 // SwiftPM stamps the Mach-O SDK version with the deployment target (macOS 14), and

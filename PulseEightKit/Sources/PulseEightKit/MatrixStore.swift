@@ -1,6 +1,6 @@
 import Foundation
 
-/// Connection settings. Keys match backend/config.json so an existing file can be imported as-is.
+/// Connection settings. Keys match legacy/PulseEightWeb/backend/config.json so an existing file can be imported as-is.
 /// The admin password is deliberately not part of this: it belongs in the OS secret store.
 public struct MatrixConfig: Codable, Sendable, Equatable {
     public var host: String?
@@ -60,7 +60,7 @@ public struct MatrixState: Sendable, Equatable {
 }
 
 /// Owns the connection to the matrix and keeps cached state fresh. Port of
-/// backend/app/pulse8_service.py plus the polling half of CachingPulseEightMatrixClient:
+/// legacy/PulseEightWeb/backend/app/pulse8_service.py plus the polling half of CachingPulseEightMatrixClient:
 /// routing every `pollInterval`, per-port details every `detailPollInterval`, and system
 /// info every 60s. Replaces the WebSocket fan-out with a single `onChange` callback.
 public actor MatrixStore {

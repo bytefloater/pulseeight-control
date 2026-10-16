@@ -1,6 +1,6 @@
 import Foundation
 
-/// Admin-gated endpoints the vendor library doesn't cover. Ported from backend/app/pulse8_admin.py,
+/// Admin-gated endpoints the vendor library doesn't cover. Ported from legacy/PulseEightWeb/backend/app/pulse8_admin.py,
 /// which found them by inspecting the matrix's own admin web UI.
 ///
 /// The device issues no session cookie on login, so there is nothing to persist: every

@@ -1,13 +1,13 @@
 # PulseEight core interface
 
-The logic shared by the macOS and Windows apps lives in Swift (`swift/Sources/PulseEightCore`):
+The logic shared by the macOS and Windows apps lives in Swift (`PulseEightKit/Sources/PulseEightCore`):
 settings and the admin password, the connection to the matrix and its polling, the connection
 phase, validation, and every command. Each app draws its own native UI on top.
 
 * **macOS** links `PulseEightCore` directly and uses the typed Swift API (`AppCore`).
 * **Windows** loads `pulseeight_core.dll` (built from `PulseEightCoreExports`) and talks JSON
-  through the C functions in `swift/include/pulseeight_core.h`, via the C# wrapper in
-  `windows/PulseEight.Core` (`CoreClient`).
+  through the C functions in `PulseEightKit/include/pulseeight_core.h`, via the C# wrapper in
+  `PulseEightControl-windows/Core` (`CoreClient`).
 
 `tools/core_smoke.py` exercises the C interface end to end from outside Swift (ctypes), and is
 the executable reference for how a client uses it.

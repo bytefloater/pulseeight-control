@@ -24,7 +24,7 @@ import Testing
         #expect(port.status == .moduleNotPresent)
     }
 
-    /// Regression for backend/app/pulse8_service.py `_apply_raw_feature_corrections`: the Python
+    /// Regression for legacy/PulseEightWeb/backend/app/pulse8_service.py `_apply_raw_feature_corrections`: the Python
     /// library read these three fields from wrongly-cased keys and always got None.
     @Test func featuresReadAllCapsAcronyms() throws {
         let features = try decode(Fixtures.systemFeatures, as: SystemFeatures.self)

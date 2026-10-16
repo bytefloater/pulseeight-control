@@ -2,7 +2,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "PulseEightControl",
+    name: "PulseEightKit",
     platforms: [.macOS(.v14)],
     products: [
         .library(name: "PulseEightKit", targets: ["PulseEightKit"]),

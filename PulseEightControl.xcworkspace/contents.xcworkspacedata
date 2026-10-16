@@ -2,22 +2,22 @@
 <Workspace
    version = "1.0">
    <FileRef
-      location = "group:swift">
+      location = "group:PulseEightKit">
    </FileRef>
    <FileRef
-      location = "group:app">
+      location = "group:PulseEightControl-macos">
    </FileRef>
    <FileRef
-      location = "group:spikes/scui-spike">
+      location = "group:PulseEightControl-windows">
    </FileRef>
    <FileRef
-      location = "group:tools">
+      location = "group:PulseEightFakeServer">
    </FileRef>
    <FileRef
-      location = "group:backend">
+      location = "group:legacy">
    </FileRef>
    <FileRef
-      location = "group:scripts">
+      location = "group:docs">
    </FileRef>
    <FileRef
       location = "group:README.md">

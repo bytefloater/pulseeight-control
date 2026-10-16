@@ -1,5 +1,5 @@
 /* PulseEight core: C interface to the shared logic (settings, connection, commands).
- * Implemented in Swift (swift/Sources/PulseEightCoreExports). See docs/core-interface.md.
+ * Implemented in Swift (PulseEightKit/Sources/PulseEightCoreExports). See docs/core-interface.md.
  *
  * Strings are UTF-8. Every string returned by the library is owned by the caller and must be
  * released with p8_free_string. Unless stated, functions may be called from any thread. */

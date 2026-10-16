@@ -3,9 +3,9 @@
   Builds the shared core (Swift) and the Windows app (WinUI 3), then stages them side by side.
 
 .EXAMPLE
-  .\windows\build.ps1            # debug build for this PC's architecture
-  .\windows\build.ps1 -Run       # build, then start the app
-  .\windows\build.ps1 -Configuration Release
+  .\PulseEightControl-windows\build.ps1            # debug build for this PC's architecture
+  .\PulseEightControl-windows\build.ps1 -Run       # build, then start the app
+  .\PulseEightControl-windows\build.ps1 -Configuration Release
 #>
 param(
     [ValidateSet('Debug', 'Release')] [string] $Configuration = 'Debug',
@@ -19,9 +19,10 @@ $swiftConfig = $Configuration.ToLower()
 $native = Join-Path $PSScriptRoot "native\$platform"
 
 Write-Host "== Building pulseeight_core (Swift, $swiftConfig)"
-& swift build --package-path (Join-Path $root 'swift') -c $swiftConfig --product pulseeight_core
+$kit = Join-Path $root 'PulseEightKit'
+& swift build --package-path $kit -c $swiftConfig --product pulseeight_core
 if ($LASTEXITCODE -ne 0) { throw 'swift build failed' }
-$binPath = (& swift build --package-path (Join-Path $root 'swift') -c $swiftConfig --show-bin-path).Trim()
+$binPath = (& swift build --package-path $kit -c $swiftConfig --show-bin-path).Trim()
 
 New-Item -ItemType Directory -Force $native | Out-Null
 Copy-Item (Join-Path $binPath 'pulseeight_core.dll') $native -Force
@@ -39,9 +40,9 @@ Write-Host "== Copying Swift runtime from $runtime"
 Get-ChildItem $runtime -Filter '*.dll' | Copy-Item -Destination $native -Force
 
 Write-Host "== Building the Windows app ($Configuration, $platform)"
-& dotnet build (Join-Path $PSScriptRoot 'PulseEightControl') -c $Configuration -p:Platform=$platform
+& dotnet build (Join-Path $PSScriptRoot 'App') -c $Configuration -p:Platform=$platform
 if ($LASTEXITCODE -ne 0) { throw 'dotnet build failed' }
 
-$exe = Join-Path $PSScriptRoot "PulseEightControl\bin\$platform\$Configuration\net8.0-windows10.0.19041.0\win-$($platform.ToLower())\PulseEightControl.exe"
+$exe = Join-Path $PSScriptRoot "App\bin\$platform\$Configuration\net8.0-windows10.0.19041.0\win-$($platform.ToLower())\PulseEightControl.exe"
 Write-Host "== Built: $exe"
 if ($Run) { & $exe }

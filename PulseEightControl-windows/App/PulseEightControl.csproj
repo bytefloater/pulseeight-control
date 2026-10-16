@@ -31,7 +31,7 @@
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260921001" />
   </ItemGroup>
 
-  <!-- pulseeight_core.dll and the Swift runtime DLLs it needs, staged by windows/build.ps1. -->
+  <!-- pulseeight_core.dll and the Swift runtime DLLs it needs, staged by PulseEightControl-windows/build.ps1. -->
   <PropertyGroup>
     <P8NativeDir Condition="'$(P8NativeDir)' == ''">$(MSBuildThisFileDirectory)..\native\$(Platform)</P8NativeDir>
   </PropertyGroup>
@@ -40,7 +40,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\PulseEight.Core\PulseEight.Core.csproj" />
+    <ProjectReference Include="..\Core\PulseEight.Core.csproj" />
   </ItemGroup>
 
 </Project>

@@ -2,9 +2,9 @@ __pycache__/
 *.pyc
 .venv/
 venv/
-backend/config.json
+legacy/PulseEightWeb/backend/config.json
 service.log*
-scripts/windows/tools/
+legacy/PulseEightWeb/scripts/windows/tools/
 .DS_Store
 .build/
 .swiftpm/
@@ -20,4 +20,4 @@ bin/
 obj/
 
 # staged native libraries for the Windows app
-windows/native/
+PulseEightControl-windows/native/

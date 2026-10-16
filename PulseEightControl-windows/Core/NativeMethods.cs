@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 
 namespace PulseEight.Core;
 
-/// <summary>The C interface of pulseeight_core (swift/include/pulseeight_core.h).</summary>
+/// <summary>The C interface of pulseeight_core (PulseEightKit/include/pulseeight_core.h).</summary>
 internal static class NativeMethods
 {
     public const string Library = "pulseeight_core";

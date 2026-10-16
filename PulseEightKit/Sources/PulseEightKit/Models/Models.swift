@@ -3,7 +3,7 @@ import Foundation
 // Ported from pulse_eight_matrix_client/models.py (0.5.0). That library used a pydantic
 // alias generator that capitalizes each snake_case word, so the wire keys are spelled out here.
 // Where it got an acronym wrong (BacklightLED, StatusLED, CEC), the keys below are the
-// device's real ones, so backend/app/pulse8_service.py's _apply_raw_feature_corrections is not needed.
+// device's real ones, so legacy/PulseEightWeb/backend/app/pulse8_service.py's _apply_raw_feature_corrections is not needed.
 
 public enum PortMode: String, Decodable, Sendable, Hashable, CaseIterable {
     case input = "Input"
@@ -342,7 +342,7 @@ public struct OutputPortDetails: Decodable, Sendable, Equatable {
     }
 }
 
-/// Mirrors `PortUpdateInfo` from backend/app/schemas.py.
+/// Mirrors `PortUpdateInfo` from legacy/PulseEightWeb/backend/app/schemas.py.
 public struct FirmwareUpdate: Sendable, Equatable, Identifiable {
     public var bay: Int
     public var name: String

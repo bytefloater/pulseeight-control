@@ -8,7 +8,7 @@ public enum Appearance: String, Codable, CaseIterable, Sendable, CustomStringCon
 }
 
 /// Everything persisted in settings.json. `matrix` uses the same keys as the old
-/// backend/config.json, minus `admin_password`.
+/// legacy/PulseEightWeb/backend/config.json, minus `admin_password`.
 public struct AppSettings: Codable, Equatable, Sendable {
     public var matrix = MatrixConfig()
     public var appearance: Appearance = .system

@@ -13,7 +13,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         }
     }
 
-    /// SF Symbol name (macOS only).
+    /// SF Symbol name, used by the native macOS Settings sidebar.
     var symbol: String {
         switch self {
         case .matrix: "network"
@@ -189,8 +189,6 @@ struct SidebarRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            SettingsSymbol(name: pane.symbol, selected: selected)
-                .frame(width: 26, height: 22)
             if selected {
                 Text(pane.title).foregroundColor(Color.white)
             } else {
@@ -200,7 +198,7 @@ struct SidebarRow: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(selected ? Color.systemAccent : Color.clear)
+        .background(selected ? Color.system(.blue) : Color.clear)
         .cornerRadius(10)
     }
 }

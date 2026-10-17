@@ -1,0 +1,195 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build: app (debug)",
+            "detail": "Windows: core + WinUI app (PulseEightControl-windows/build.ps1). macOS: the SwiftUI app (swift build).",
+            "type": "process",
+            "command": "swift",
+            "args": ["build", "--package-path", "${workspaceFolder}/PulseEightControl-macos"],
+            "windows": {
+                "command": "powershell",
+                "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/PulseEightControl-windows/build.ps1"],
+                "problemMatcher": ["$msCompile"]
+            },
+            "osx": { "problemMatcher": ["$swiftc"] },
+            "group": { "kind": "build", "isDefault": true },
+            "presentation": { "reveal": "always", "panel": "shared", "clear": true }
+        },
+        {
+            "label": "Build: app (release)",
+            "type": "process",
+            "command": "swift",
+            "args": ["build", "--package-path", "${workspaceFolder}/PulseEightControl-macos", "-c", "release"],
+            "windows": {
+                "command": "powershell",
+                "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/PulseEightControl-windows/build.ps1", "-Configuration", "Release"],
+                "problemMatcher": ["$msCompile"]
+            },
+            "osx": { "problemMatcher": ["$swiftc"] },
+            "group": "build",
+            "presentation": { "reveal": "always", "panel": "shared", "clear": true }
+        },
+        {
+            "label": "Package: macOS app",
+            "detail": "macOS only: builds out/macos/PulseEightControl.app (release) with its icon.",
+            "type": "process",
+            "command": "${workspaceFolder}/PulseEightControl-macos/package.sh",
+            "args": ["release"],
+            "presentation": { "reveal": "always", "panel": "shared", "clear": true },
+            "problemMatcher": ["$swiftc"]
+        },
+        {
+            "label": "Run: app",
+            "detail": "Builds (debug) and starts the app with your normal settings.",
+            "type": "process",
+            "command": "swift",
+            "args": ["run", "--package-path", "${workspaceFolder}/PulseEightControl-macos", "PulseEightControl"],
+            "windows": {
+                "command": "powershell",
+                "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/PulseEightControl-windows/build.ps1", "-Run"],
+                "problemMatcher": ["$msCompile"]
+            },
+            "osx": { "problemMatcher": ["$swiftc"] },
+            "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+        },
+
+        {
+            "label": "Dev: prepare config",
+            "detail": "Creates out/dev-config/settings.json (pointing at the fake matrix on 127.0.0.1:8080) if it doesn't exist.",
+            "type": "process",
+            "command": "sh",
+            "args": ["-c", "mkdir -p out/dev-config && { [ -f out/dev-config/settings.json ] || cp PulseEightFakeServer/dev/settings.json out/dev-config/settings.json; }"],
+            "windows": {
+                "command": "powershell",
+                "args": ["-NoProfile", "-Command", "New-Item -ItemType Directory -Force out/dev-config | Out-Null; if (-not (Test-Path out/dev-config/settings.json)) { Copy-Item PulseEightFakeServer/dev/settings.json out/dev-config/settings.json }"]
+            },
+            "options": { "cwd": "${workspaceFolder}" },
+            "presentation": { "reveal": "silent", "panel": "shared" },
+            "problemMatcher": []
+        },
+        {
+            "label": "Fake matrix: start",
+            "detail": "Runs p8fake on 127.0.0.1:8080 (admin password: secret). Stop it by closing its terminal.",
+            "type": "process",
+            "command": "swift",
+            "args": ["run", "--package-path", "${workspaceFolder}/PulseEightFakeServer", "--scratch-path", "${workspaceFolder}/out/fake", "p8fake", "--port", "8080", "--password", "secret"],
+            "isBackground": true,
+            "presentation": { "reveal": "silent", "panel": "dedicated", "group": "fake" },
+            "problemMatcher": {
+                "owner": "p8fake",
+                "pattern": { "regexp": "^$" },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": "^(Building|Compiling|\\[|Planning)",
+                    "endsPattern": "^Fake NeoMatrix on"
+                }
+            }
+        },
+        {
+            "label": "Run: app (dev config)",
+            "type": "process",
+            "command": "swift",
+            "args": ["run", "--package-path", "${workspaceFolder}/PulseEightControl-macos", "PulseEightControl"],
+            "windows": {
+                "command": "powershell",
+                "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/PulseEightControl-windows/build.ps1", "-Run"],
+                "problemMatcher": ["$msCompile"]
+            },
+            "osx": { "problemMatcher": ["$swiftc"] },
+            "options": {
+                "env": {
+                    "P8_CONFIG_DIR": "${workspaceFolder}/out/dev-config",
+                    "P8_SECRET_STORE": "file"
+                }
+            },
+            "hide": true,
+            "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+        },
+        {
+            "label": "Run: app against fake matrix",
+            "detail": "Starts p8fake, then builds and runs the app with a throwaway config (out/dev-config) that points at it. Enter the password 'secret' in Settings to try admin features.",
+            "dependsOn": ["Dev: prepare config", "Fake matrix: start", "Run: app (dev config)"],
+            "dependsOrder": "sequence",
+            "problemMatcher": []
+        },
+        {
+            "label": "Run: app against fake matrix (debug prerequisites)",
+            "detail": "What the 'against fake matrix' debug configurations run first: the dev config, the fake matrix and a debug build.",
+            "dependsOn": ["Dev: prepare config", "Fake matrix: start", "Build: app (debug)"],
+            "dependsOrder": "sequence",
+            "hide": true,
+            "problemMatcher": []
+        },
+
+        {
+            "label": "Test: PulseEightKit",
+            "type": "process",
+            "command": "swift",
+            "args": ["test", "--package-path", "${workspaceFolder}/PulseEightKit"],
+            "group": "test",
+            "presentation": { "reveal": "always", "panel": "shared", "clear": true },
+            "problemMatcher": ["$swiftc"]
+        },
+        {
+            "label": "Test: PulseEightFakeServer",
+            "type": "process",
+            "command": "swift",
+            "args": ["test", "--package-path", "${workspaceFolder}/PulseEightFakeServer"],
+            "group": "test",
+            "presentation": { "reveal": "always", "panel": "shared", "clear": true },
+            "problemMatcher": ["$swiftc"]
+        },
+        {
+            "label": "Test: Windows app (end to end)",
+            "detail": "Windows only: builds the core and p8fake, then runs Core.Tests against them.",
+            "type": "process",
+            "command": "echo",
+            "args": ["Windows only: skipped."],
+            "windows": {
+                "command": "powershell",
+                "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/PulseEightControl-windows/test.ps1"]
+            },
+            "group": "test",
+            "presentation": { "reveal": "always", "panel": "shared", "clear": true },
+            "problemMatcher": ["$msCompile"]
+        },
+        {
+            "label": "Test: all",
+            "dependsOn": ["Test: PulseEightKit", "Test: PulseEightFakeServer", "Test: Windows app (end to end)"],
+            "dependsOrder": "sequence",
+            "group": { "kind": "test", "isDefault": true },
+            "problemMatcher": []
+        },
+
+        {
+            "label": "Build: p8ctl (debug)",
+            "type": "process",
+            "command": "swift",
+            "args": ["build", "--package-path", "${workspaceFolder}/PulseEightKit", "--product", "p8ctl"],
+            "presentation": { "reveal": "silent", "panel": "shared" },
+            "problemMatcher": ["$swiftc"]
+        },
+        {
+            "label": "Build: p8fake (debug)",
+            "type": "process",
+            "command": "swift",
+            "args": ["build", "--package-path", "${workspaceFolder}/PulseEightFakeServer", "--product", "p8fake"],
+            "presentation": { "reveal": "silent", "panel": "shared" },
+            "problemMatcher": ["$swiftc"]
+        },
+        {
+            "label": "Clean: all build output",
+            "detail": "Deletes out/ and the Swift .build folders.",
+            "type": "process",
+            "command": "rm",
+            "args": ["-rf", "out", "PulseEightKit/.build", "PulseEightFakeServer/.build", "PulseEightControl-macos/.build"],
+            "windows": {
+                "command": "powershell",
+                "args": ["-NoProfile", "-Command", "Remove-Item -Recurse -Force -ErrorAction SilentlyContinue out, PulseEightKit/.build, PulseEightFakeServer/.build, PulseEightControl-macos/.build"]
+            },
+            "options": { "cwd": "${workspaceFolder}" },
+            "problemMatcher": []
+        }
+    ]
+}

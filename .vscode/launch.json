@@ -1,0 +1,90 @@
+﻿{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug app (macOS)",
+            "type": "swift",
+            "request": "launch",
+            "target": "PulseEightControl",
+            "configuration": "debug",
+            "cwd": "${workspaceFolder}/PulseEightControl-macos",
+            "args": [],
+            "preLaunchTask": "Build: app (debug)"
+        },
+        {
+            "name": "Debug app (macOS) against fake matrix",
+            "type": "swift",
+            "request": "launch",
+            "target": "PulseEightControl",
+            "configuration": "debug",
+            "cwd": "${workspaceFolder}/PulseEightControl-macos",
+            "args": [],
+            "env": { "P8_CONFIG_DIR": "${workspaceFolder}/out/dev-config", "P8_SECRET_STORE": "file" },
+            "preLaunchTask": "Run: app against fake matrix (debug prerequisites)"
+        },
+
+        {
+            "name": "Debug app (Windows ARM64)",
+            "type": "coreclr",
+            "request": "launch",
+            "program": "${workspaceFolder}/out/windows/bin/PulseEightControl/debug_win-arm64/PulseEightControl.exe",
+            "cwd": "${workspaceFolder}",
+            "console": "internalConsole",
+            "stopAtEntry": false,
+            "preLaunchTask": "Build: app (debug)"
+        },
+        {
+            "name": "Debug app (Windows x64)",
+            "type": "coreclr",
+            "request": "launch",
+            "program": "${workspaceFolder}/out/windows/bin/PulseEightControl/debug_win-x64/PulseEightControl.exe",
+            "cwd": "${workspaceFolder}",
+            "console": "internalConsole",
+            "stopAtEntry": false,
+            "preLaunchTask": "Build: app (debug)"
+        },
+        {
+            "name": "Debug app (Windows ARM64) against fake matrix",
+            "type": "coreclr",
+            "request": "launch",
+            "program": "${workspaceFolder}/out/windows/bin/PulseEightControl/debug_win-arm64/PulseEightControl.exe",
+            "cwd": "${workspaceFolder}",
+            "console": "internalConsole",
+            "stopAtEntry": false,
+            "env": { "P8_CONFIG_DIR": "${workspaceFolder}/out/dev-config", "P8_SECRET_STORE": "file" },
+            "preLaunchTask": "Run: app against fake matrix (debug prerequisites)"
+        },
+        {
+            "name": "Debug app (Windows x64) against fake matrix",
+            "type": "coreclr",
+            "request": "launch",
+            "program": "${workspaceFolder}/out/windows/bin/PulseEightControl/debug_win-x64/PulseEightControl.exe",
+            "cwd": "${workspaceFolder}",
+            "console": "internalConsole",
+            "stopAtEntry": false,
+            "env": { "P8_CONFIG_DIR": "${workspaceFolder}/out/dev-config", "P8_SECRET_STORE": "file" },
+            "preLaunchTask": "Run: app against fake matrix (debug prerequisites)"
+        },
+
+        {
+            "name": "Debug p8ctl: ports (against the fake matrix)",
+            "type": "swift",
+            "request": "launch",
+            "target": "p8ctl",
+            "configuration": "debug",
+            "cwd": "${workspaceFolder}/PulseEightKit",
+            "args": ["--host", "127.0.0.1", "--port", "8080", "ports"],
+            "preLaunchTask": "Build: p8ctl (debug)"
+        },
+        {
+            "name": "Debug p8fake",
+            "type": "swift",
+            "request": "launch",
+            "target": "p8fake",
+            "configuration": "debug",
+            "cwd": "${workspaceFolder}/PulseEightFakeServer",
+            "args": ["--port", "8080", "--password", "secret"],
+            "preLaunchTask": "Build: p8fake (debug)"
+        }
+    ]
+}

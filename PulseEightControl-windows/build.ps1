@@ -17,21 +17,8 @@ param(
     [switch] $Run
 )
 
-$ErrorActionPreference = 'Stop'
-$root = Split-Path -Parent $PSScriptRoot
-$out = Join-Path $root 'out'
-$platform = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'ARM64' } else { 'x64' }
+. (Join-Path $PSScriptRoot 'common.ps1')
 $swiftConfig = $Configuration.ToLower()
-$native = Join-Path $out "native\$platform"
-
-# Run a native tool and judge it by its exit code. Under $ErrorActionPreference = Stop, Windows
-# PowerShell 5.1 turns any stderr output (Swift prints harmless warnings on a fresh build) into a
-# terminating error.
-function Invoke-Native {
-    $previous = $ErrorActionPreference
-    $ErrorActionPreference = 'Continue'
-    try { & $args[0] $args[1..($args.Count - 1)] } finally { $ErrorActionPreference = $previous }
-}
 
 Write-Host "== Building pulseeight_core (Swift, $swiftConfig)"
 $kit = Join-Path $root 'PulseEightKit'
@@ -56,7 +43,7 @@ Write-Host "== Copying Swift runtime from $runtime"
 Get-ChildItem $runtime -Filter '*.dll' | Copy-Item -Destination $native -Force
 
 Write-Host "== Building the Windows app ($Configuration, $platform)"
-Invoke-Native dotnet build (Join-Path $PSScriptRoot 'App') -c $Configuration -p:Platform=$platform
+Invoke-Native dotnet build (Join-Path $PSScriptRoot 'App') -c $Configuration "-p:Platform=$platform"
 if ($LASTEXITCODE -ne 0) { throw 'dotnet build failed' }
 
 $exe = Join-Path $out "windows\bin\PulseEightControl\$($Configuration.ToLower())_win-$($platform.ToLower())\PulseEightControl.exe"

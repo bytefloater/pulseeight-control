@@ -6,6 +6,7 @@ import SwiftUI
 struct PulseEightControlApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var model = AppModel()
+    @State private var updater = UpdaterModel()
 
     var body: some Scene {
         // A single window (not a WindowGroup), so there is no File > New Window.
@@ -15,10 +16,10 @@ struct PulseEightControlApp: App {
                 .task { await model.start() }
         }
         .defaultSize(width: 900, height: 660)
-        .commands { AppCommands(model: model) }
+        .commands { AppCommands(model: model, updater: updater) }
 
         Settings {
-            SettingsView(model: model)
+            SettingsView(model: model, updater: updater)
                 .preferredColorScheme(model.settings.appearance.colorScheme)
         }
     }

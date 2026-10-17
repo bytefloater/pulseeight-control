@@ -6,6 +6,7 @@ import SwiftUI
 /// The menu bar. Settings… (Cmd-,) comes from the `Settings` scene; Edit and Window are standard.
 struct AppCommands: Commands {
     var model: AppModel
+    var updater: UpdaterModel
 
     private var features: SystemFeatures? { model.state?.system?.features }
     private var hasHost: Bool { model.settings.matrix.host?.isEmpty == false }
@@ -17,6 +18,14 @@ struct AppCommands: Commands {
     }
 
     var body: some Commands {
+        // Under "About PulseEight Control", where Mac apps keep it. Absent from development runs.
+        if updater.isAvailable {
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") { updater.checkForUpdates() }
+                    .disabled(!updater.canCheckForUpdates)
+            }
+        }
+
         CommandGroup(replacing: .newItem) {
             Button("Open Matrix Web Interface") { openWebInterface() }
                 .keyboardShortcut("o", modifiers: [.command, .shift])

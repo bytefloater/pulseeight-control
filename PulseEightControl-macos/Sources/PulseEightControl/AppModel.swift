@@ -19,7 +19,7 @@ enum Page: String, CaseIterable, Identifiable, CustomStringConvertible {
 }
 
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case matrix, admin, appearance
+    case matrix, admin, appearance, updates
 
     var id: String { rawValue }
 
@@ -28,6 +28,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .matrix: "Matrix"
         case .admin: "Admin"
         case .appearance: "Appearance"
+        case .updates: "Updates"
         }
     }
 
@@ -37,6 +38,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .matrix: "network"
         case .admin: "lock"
         case .appearance: "paintbrush"
+        case .updates: "arrow.triangle.2.circlepath"
         }
     }
 }

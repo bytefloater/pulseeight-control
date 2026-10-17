@@ -4,6 +4,7 @@ import SwiftUI
 /// The Settings window (Cmd-,): a sidebar of panes over grouped forms, like System Settings.
 struct SettingsView: View {
     @Bindable var model: AppModel
+    @Bindable var updater: UpdaterModel
 
     var body: some View {
         NavigationSplitView {
@@ -20,6 +21,7 @@ struct SettingsView: View {
                 case .matrix: matrixPane
                 case .admin: adminPane
                 case .appearance: appearancePane
+                case .updates: updatesPane
                 }
             }
             .formStyle(.grouped)
@@ -78,6 +80,39 @@ struct SettingsView: View {
         Section("Window") {
             Toggle("Highlight row and column", isOn: highlightBinding)
             Toggle("Show status bar", isOn: statusBarBinding)
+        }
+    }
+
+    @ViewBuilder
+    private var updatesPane: some View {
+        Section("Version") {
+            LabeledContent("PulseEight Control") { Text(AppVersion.description()).textSelection(.enabled) }
+        }
+        if updater.isAvailable {
+            Section {
+                Toggle("Automatically check for updates", isOn: $updater.automaticallyChecks)
+                LabeledContent("Last checked") {
+                    if let date = updater.lastChecked {
+                        Text(date, format: .dateTime.day().month().year().hour().minute())
+                    } else {
+                        Text("Never").foregroundStyle(.secondary)
+                    }
+                }
+                HStack {
+                    Spacer()
+                    Button("Check Now") { updater.checkForUpdates() }
+                        .disabled(!updater.canCheckForUpdates)
+                }
+            } header: {
+                Text("Software Update")
+            } footer: {
+                Text("Updates are signed and checked before they are installed.")
+            }
+        } else {
+            Section {
+                Text("Updates are delivered to the packaged app. This is a development build, so there is nothing to check.")
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 

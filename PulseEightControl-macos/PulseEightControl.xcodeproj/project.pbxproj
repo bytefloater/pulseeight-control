@@ -24,6 +24,7 @@
 		B00000000000000000000001 /* PulseEightKit in Frameworks */ = {isa = PBXBuildFile; productRef = D00000000000000000000001 /* PulseEightKit */; };
 		B00000000000000000000002 /* PulseEightCore in Frameworks */ = {isa = PBXBuildFile; productRef = D00000000000000000000002 /* PulseEightCore */; };
 		B00000000000000000000003 /* PulseEightControl.icon in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000002 /* PulseEightControl.icon */; };
+		B00000000000000000000004 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = D00000000000000000000003 /* Sparkle */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -49,6 +50,7 @@
 			files = (
 				B00000000000000000000001 /* PulseEightKit in Frameworks */,
 				B00000000000000000000002 /* PulseEightCore in Frameworks */,
+				B00000000000000000000004 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -97,6 +99,7 @@
 			packageProductDependencies = (
 				D00000000000000000000001 /* PulseEightKit */,
 				D00000000000000000000002 /* PulseEightCore */,
+				D00000000000000000000003 /* Sparkle */,
 			);
 			productName = PulseEightControl;
 			productReference = F00000000000000000000001 /* PulseEightControl.app */;
@@ -131,6 +134,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				R00000000000000000000001 /* XCLocalSwiftPackageReference "../PulseEightKit" */,
+				R00000000000000000000002 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = J00000000000000000000002 /* Products */;
@@ -283,11 +287,13 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEAD_CODE_STRIPPING = YES;
-				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "PulseEight Control";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				// Where the embedded Sparkle.framework lives in the app bundle.
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.bytefloater.pulseeight-control";
 				PRODUCT_NAME = PulseEightControl;
 			};
@@ -302,11 +308,13 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEAD_CODE_STRIPPING = YES;
-				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "PulseEight Control";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				// Where the embedded Sparkle.framework lives in the app bundle.
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.bytefloater.pulseeight-control";
 				PRODUCT_NAME = PulseEightControl;
 			};
@@ -369,6 +377,17 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		R00000000000000000000002 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = exactVersion;
+				version = 2.10.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		D00000000000000000000001 /* PulseEightKit */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -379,6 +398,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = R00000000000000000000001 /* XCLocalSwiftPackageReference "../PulseEightKit" */;
 			productName = PulseEightCore;
+		};
+		D00000000000000000000003 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = R00000000000000000000002 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

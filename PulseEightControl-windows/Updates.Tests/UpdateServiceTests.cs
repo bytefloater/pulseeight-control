@@ -262,3 +262,39 @@ public sealed class ConfigurationTests
     public void ADevelopmentAssemblyHasNoConfiguration() =>
         Assert.Null(UpdateConfiguration.FromAssembly(typeof(ConfigurationTests).Assembly));
 }
+
+public sealed class ReleaseNotesTextTests
+{
+    [Fact]
+    public void AListBecomesBullets() =>
+        Assert.Equal("• Faster\n• Fixes a crash", ReleaseNotesText.FromHtml("<ul>\n  <li>Faster</li>\n  <li>Fixes a crash</li>\n</ul>"));
+
+    [Fact]
+    public void ParagraphsAndBreaksKeepTheirLines() =>
+        Assert.Equal("First paragraph.\n\nSecond.\nNext line.", ReleaseNotesText.FromHtml("<p>First paragraph.</p><p>Second.<br>Next line.</p>"));
+
+    [Fact]
+    public void EntitiesAreDecoded() =>
+        Assert.Equal("Fish & chips <3", ReleaseNotesText.FromHtml("Fish &amp; chips &lt;3"));
+
+    [Fact]
+    public void ScriptsAndStylesAreRemovedWithTheirContents() =>
+        Assert.Equal("Hello", ReleaseNotesText.FromHtml("<style>p{color:red}</style><script>alert('x')</script>Hello"));
+
+    [Fact]
+    public void MarkupIsDroppedNotInterpreted() =>
+        Assert.Equal("Click here", ReleaseNotesText.FromHtml("<a href=\"https://evil.example\" onclick=\"steal()\">Click here</a>"));
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   \n ")]
+    public void NothingIsNothing(string? html) => Assert.Equal("", ReleaseNotesText.FromHtml(html));
+
+    [Fact]
+    public void PlainTextPassesThrough() => Assert.Equal("Just words.", ReleaseNotesText.FromHtml("Just words."));
+
+    [Fact]
+    public void RunsOfBlankLinesAreCollapsed() =>
+        Assert.Equal("A\n\nB", ReleaseNotesText.FromHtml("<p>A</p>\n\n\n\n<p>B</p>"));
+}

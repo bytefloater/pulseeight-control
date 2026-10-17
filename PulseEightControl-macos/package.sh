@@ -9,6 +9,7 @@
 #   P8_BUILD               build number (default: 1)
 #   P8_UPDATE_FEED_URL     where the app looks for updates         } give both or neither: an app with
 #   P8_SPARKLE_PUBLIC_KEY  the key updates must be signed with     } neither never checks for updates
+#   P8_OUT_DIR             where to put the .app (default: out/macos in the repository)
 #
 # The feed URL and key are put into the built app's Info.plist, not the source one, so development
 # builds can't update themselves and the choice of where releases live is made at release time.
@@ -44,7 +45,9 @@ swift build -c "$config" $arch_flags
 # shellcheck disable=SC2086
 bin="$(swift build -c "$config" $arch_flags --show-bin-path)/PulseEightControl"
 
-app=../out/macos/PulseEightControl.app
+out_dir="${P8_OUT_DIR:-../out/macos}"
+mkdir -p "$out_dir"
+app="$(cd "$out_dir" && pwd)/PulseEightControl.app"
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" "$app/Contents/Frameworks"
 cp "$bin" "$app/Contents/MacOS/PulseEightControl"
@@ -79,6 +82,6 @@ xcrun actool PulseEightControl.icon \
 codesign --force --deep --sign - "$app"
 codesign --verify --deep --strict "$app"
 
-echo "Built $(cd "$(dirname "$app")" && pwd)/PulseEightControl.app ($version, build $build, $([ -n "$feed" ] && echo "updates from $feed" || echo "no update feed"))"
+echo "Built $app ($version, build $build, $([ -n "$feed" ] && echo "updates from $feed" || echo "no update feed"))"
 [ "$open_after" = 1 ] && open "$app"
 exit 0

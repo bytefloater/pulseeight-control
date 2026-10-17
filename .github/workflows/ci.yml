@@ -77,7 +77,7 @@ jobs:
 
       - name: Helper script tests
         if: ${{ !cancelled() }}
-        run: python3 -m unittest discover -s scripts/ci -p 'test_*.py'
+        run: python3 scripts/run-tests.py
 
   # The macOS app: its model tests, a release build the way Xcode makes it, and the packaged .app.
   app-macos:

@@ -194,12 +194,22 @@
         },
         {
             "label": "Test: helper scripts",
-            "detail": "Python unit tests for the CI helper scripts (scripts/ci).",
+            "detail": "Python unit tests for the CI and release helper scripts (scripts/ci, scripts/release).",
             "type": "process",
             "command": "python3",
-            "args": ["-m", "unittest", "discover", "-s", "scripts/ci", "-p", "test_*.py"],
-            "windows": { "command": "py", "args": ["-3", "-m", "unittest", "discover", "-s", "scripts/ci", "-p", "test_*.py"] },
+            "args": ["scripts/run-tests.py"],
+            "windows": { "command": "py", "args": ["-3", "scripts/run-tests.py"] },
             "options": { "cwd": "${workspaceFolder}" },
+            "group": "test",
+            "presentation": { "reveal": "always", "panel": "shared", "clear": true }
+        },
+        {
+            "label": "Test: macOS update (end to end)",
+            "detail": "macOS only, interactive: builds 0.1.0 and 0.1.1 and lets the real Sparkle update one to the other from a local feed. Windows appear briefly; needs Accessibility permission for the terminal.",
+            "type": "process",
+            "command": "echo",
+            "args": ["macOS only: skipped."],
+            "osx": { "command": "${workspaceFolder}/scripts/release/e2e-macos-update.sh", "args": [] },
             "group": "test",
             "presentation": { "reveal": "always", "panel": "shared", "clear": true }
         },

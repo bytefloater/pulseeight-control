@@ -33,7 +33,7 @@
 
   <!-- pulseeight_core.dll and the Swift runtime DLLs it needs, staged by PulseEightControl-windows/build.ps1. -->
   <PropertyGroup>
-    <P8NativeDir Condition="'$(P8NativeDir)' == ''">$(MSBuildThisFileDirectory)..\native\$(Platform)</P8NativeDir>
+    <P8NativeDir Condition="'$(P8NativeDir)' == ''">$(MSBuildThisFileDirectory)..\..\out\native\$(Platform)</P8NativeDir>
   </PropertyGroup>
   <ItemGroup Condition="Exists('$(P8NativeDir)')">
     <None Include="$(P8NativeDir)\*.dll" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />

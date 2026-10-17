@@ -15,9 +15,10 @@ xcuserdata/
 *.xcuserstate
 xcshareddata/
 
+# build output of every project (.NET artifacts, SwiftPM scratch paths, staged native DLLs)
+out/
+
 # .NET
 bin/
 obj/
 
-# staged native libraries for the Windows app
-PulseEightControl-windows/native/

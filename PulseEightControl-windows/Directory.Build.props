@@ -1,0 +1,12 @@
+<Project>
+
+  <!-- All .NET build output goes to <repo>/out/windows/{bin,obj,...}/<project>/<config>_<runtime>/.
+       The default layout (<project>/bin/<platform>/<config>/<tfm>/<runtime>/..., plus MsixContent) put
+       WinUI's packaging tools past 200 characters even before the file name, and they are not
+       long-path aware. One short folder is also easy to delete for a clean build. -->
+  <PropertyGroup>
+    <UseArtifactsOutput>true</UseArtifactsOutput>
+    <ArtifactsPath>$(MSBuildThisFileDirectory)..\out\windows</ArtifactsPath>
+  </PropertyGroup>
+
+</Project>

@@ -53,7 +53,7 @@ public sealed class FakeMatrixFixture : IDisposable
     }
 
     /// <summary>P8_FAKE_SERVER names the p8fake executable; otherwise the debug build under
-    /// PulseEightFakeServer/.build is used (build it with `swift build` there).</summary>
+    /// out/fake (or PulseEightFakeServer/.build) is used; see the README.</summary>
     private static string FindFakeServer()
     {
         var explicitPath = Environment.GetEnvironmentVariable("P8_FAKE_SERVER");
@@ -62,18 +62,24 @@ public sealed class FakeMatrixFixture : IDisposable
         var name = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "p8fake.exe" : "p8fake";
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory != null; directory = directory.Parent)
         {
-            var build = Path.Combine(directory.FullName, "PulseEightFakeServer", ".build");
-            if (!Directory.Exists(build)) continue;
-            // .build/debug on current SwiftPM, .build/<triple>/debug on older ones.
-            var direct = Path.Combine(build, "debug", name);
-            if (File.Exists(direct)) return direct;
-            foreach (var triple in Directory.GetDirectories(build))
+            if (!Directory.Exists(Path.Combine(directory.FullName, "PulseEightFakeServer"))) continue;
+            // The repository root. Build folders in order of preference: out/fake (a build with
+            // --scratch-path out/fake) and the package's own .build.
+            foreach (var build in new[] { Path.Combine(directory.FullName, "out", "fake"), Path.Combine(directory.FullName, "PulseEightFakeServer", ".build") })
             {
-                var candidate = Path.Combine(triple, "debug", name);
-                if (File.Exists(candidate)) return candidate;
+                if (!Directory.Exists(build)) continue;
+                // <build>/debug on current SwiftPM, <build>/<triple>/debug on older ones.
+                var direct = Path.Combine(build, "debug", name);
+                if (File.Exists(direct)) return direct;
+                foreach (var triple in Directory.GetDirectories(build))
+                {
+                    var candidate = Path.Combine(triple, "debug", name);
+                    if (File.Exists(candidate)) return candidate;
+                }
             }
         }
-        throw new FileNotFoundException("Couldn't find the p8fake executable. Run `swift build` in PulseEightFakeServer, or set P8_FAKE_SERVER.");
+        throw new FileNotFoundException(
+            "Couldn't find the p8fake executable. Run `swift build --package-path PulseEightFakeServer --scratch-path out/fake`, or set P8_FAKE_SERVER.");
     }
 
     public void Dispose()

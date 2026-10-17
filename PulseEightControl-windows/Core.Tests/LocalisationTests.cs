@@ -74,8 +74,9 @@ public sealed class LocalisationTests
     {
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory != null; directory = directory.Parent)
         {
-            var app = Path.Combine(directory.FullName, "App");
-            if (File.Exists(Path.Combine(app, "Loc.cs"))) return app;
+            // The repository root holds PulseEightControl-windows/App; the Windows folder itself holds App.
+            foreach (var app in new[] { Path.Combine(directory.FullName, "PulseEightControl-windows", "App"), Path.Combine(directory.FullName, "App") })
+                if (File.Exists(Path.Combine(app, "Loc.cs"))) return app;
         }
         throw new DirectoryNotFoundException("Couldn't find the app's source folder above " + AppContext.BaseDirectory);
     }

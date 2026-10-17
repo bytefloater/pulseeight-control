@@ -12,7 +12,7 @@ details, for macOS and Windows, sharing one Swift core.
 | `PulseEightFakeServer/` | Swift package with a fake NeoMatrix (`p8fake`) for development and tests, so no hardware or Python is needed. |
 | `PulseEightControl-macos/` | The macOS app (SwiftCrossUI) over `PulseEightKit`. |
 | `PulseEightControl-windows/` | The Windows app: WinUI 3 + C# (`App`) over a managed wrapper (`Core`) of the C interface, with its tests (`Core.Tests`). |
-| `docs/` | Design notes, e.g. the C interface (`core-interface.md`). |
+| `docs/` | Design notes: the C interface (`core-interface.md`) and how text is localised (`localisation.md`). |
 | `legacy/` | Retired code kept for reference: the original Python web app (`PulseEightWeb/`) and the SwiftCrossUI spike (`spikes/`). |
 
 Open `PulseEightControl.xcworkspace` in Xcode to browse the packages together (macOS).
@@ -20,7 +20,8 @@ Open `PulseEightControl.xcworkspace` in Xcode to browse the packages together (m
 ## Getting started
 
 * **Windows:** see [`PulseEightControl-windows/README.md`](PulseEightControl-windows/README.md).
-* **Shared code:** `swift test --package-path PulseEightKit`.
+* **Shared code:** `swift test --package-path PulseEightKit` (and `PulseEightFakeServer`).
+* **Build output** of the Windows build goes under `out/` (short paths, gitignored; delete it to build clean).
 * **No matrix handy?** Run the fake server (see `PulseEightFakeServer/`) and point the app at `127.0.0.1`.
 
 ## Licence

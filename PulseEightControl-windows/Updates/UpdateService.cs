@@ -38,7 +38,7 @@ public sealed class UpdateService : IUpdateService
             Configuration = new JSONConfiguration(accessor, options.StateFile),
             LogWriter = _log,
             CustomInstallerArguments = options.InstallerArguments,
-            // The installer starts the app again (Inno Setup's /RESTARTAPPLICATIONS), so NetSparkle mustn't.
+            // The installer starts the app again (a [Run] entry for silent installs), so NetSparkle mustn't.
             RelaunchAfterUpdate = false,
         };
         if (options.DownloadFolder is { Length: > 0 } folder)

@@ -5,8 +5,9 @@ name: Release
 # dry run that builds and signs everything but publishes nothing.
 #
 # Setup (once): docs/releasing.md. Repository variables: RELEASES_REPO (owner/name of the public releases
-# repository), UPDATE_BASE_URL (where its feeds are served), SPARKLE_PUBLIC_KEY. Secrets: SPARKLE_ED_PRIVATE_KEY
-# (signs updates), RELEASES_REPO_TOKEN (can write to the releases repository only).
+# repository), UPDATE_BASE_URL (where its feeds are served), SPARKLE_PUBLIC_KEY (the update public key; the
+# name is historical, Windows uses the same key). Secrets: SPARKLE_ED_PRIVATE_KEY (signs updates),
+# RELEASES_REPO_TOKEN (can write to the releases repository only).
 on:
   push:
     tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
@@ -108,20 +109,82 @@ jobs:
           signature="$(sed -n 's/^signature=//p' out/release/signature.txt)"
           swift scripts/release/ed25519.swift verify "$dmg" "$SPARKLE_PUBLIC_KEY" "$signature"
 
-      - name: Checksums
-        run: cd out/release && shasum -a 256 ./*.dmg > SHA256SUMS && cat SHA256SUMS
-
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: macos-release
           path: out/release/
           if-no-files-found: error
 
-  # Uploads the files first and only then changes the feed, so no installed app is ever offered a download
-  # that isn't there yet.
+  # One installer per processor architecture. Signing happens later, on the one job that holds the key.
+  windows:
+    name: Windows (${{ matrix.arch }})
+    needs: [verify, checks]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x64, runner: windows-latest, swift-arch: amd64 }
+          - { arch: arm64, runner: windows-11-arm, swift-arch: arm64 }
+    defaults:
+      run:
+        shell: powershell # Windows PowerShell 5.1, which the scripts are written for
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: compnerd/gha-setup-swift@9ff1ee4c44888c5817fc14d1b257ac8cabb4935f # v0.5.1
+        with:
+          source: swift.org
+          swift-version: swift-6.4.1-release
+          swift-build: 6.4.1-RELEASE
+          build_arch: ${{ matrix.swift-arch }}
+          cache: "true"
+
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Install Inno Setup
+        run: |
+          $installed = (Get-Command ISCC.exe -ErrorAction SilentlyContinue) -or
+              (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe") -or
+              (Test-Path "${env:ProgramFiles}\Inno Setup 6\ISCC.exe")
+          if (-not $installed) {
+              choco install innosetup --version 6.4.3 --no-progress -y
+              if ($LASTEXITCODE -ne 0) { throw 'Installing Inno Setup failed.' }
+          }
+
+      # The version is <VERSION>.<run number>: the run number only counts up, which is what the update feed
+      # needs. The feed address and public key are compiled in so the installed app can check for updates.
+      - name: Build the app and the installer
+        env:
+          P8_VERSION: ${{ needs.verify.outputs.version }}
+          P8_BUILD: ${{ github.run_number }}
+          UPDATE_BASE_URL: ${{ vars.UPDATE_BASE_URL }}
+          SPARKLE_PUBLIC_KEY: ${{ vars.SPARKLE_PUBLIC_KEY }}
+        run: |
+          $version = "$env:P8_VERSION.$env:P8_BUILD"
+          $update = @{}
+          if ($env:UPDATE_BASE_URL -and $env:SPARKLE_PUBLIC_KEY) {
+              $update = @{ UpdateBaseUrl = $env:UPDATE_BASE_URL; UpdatePublicKey = $env:SPARKLE_PUBLIC_KEY }
+          } else {
+              Write-Host '::warning::No update settings: this build will never look for updates.'
+          }
+          .\PulseEightControl-windows\build.ps1 -Configuration Release -Version $version @update
+          .\PulseEightControl-windows\installer\build-installer.ps1 -Version $version
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-release-${{ matrix.arch }}
+          path: out/release/PulseEightControl-Setup-*.exe
+          if-no-files-found: error
+
+  # Uploads the files first and only then changes the feeds (the next job), so no installed app is ever
+  # offered a download that isn't there yet.
   publish:
     name: Publish
-    needs: [verify, macos]
+    needs: [verify, macos, windows]
     if: ${{ needs.verify.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -134,6 +197,59 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # release notes come from the commit history
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: "*-release*"
+          merge-multiple: true
+          path: files
+
+      - name: Release notes
+        run: |
+          previous="$(git describe --tags --abbrev=0 --match 'v*' "HEAD^" 2>/dev/null || true)"
+          mkdir -p notes
+          python3 scripts/release/release_notes.py --since "$previous" --markdown > notes/notes.md
+          python3 scripts/release/release_notes.py --since "$previous" > notes/notes.html
+          cat notes/notes.md
+
+      - name: Checksums
+        run: cd files && sha256sum ./*.dmg ./*.exe > SHA256SUMS && cat SHA256SUMS
+
+      - name: GitHub release in the releases repository
+        run: |
+          tag="v$VERSION"
+          flags=""
+          [ "$PRERELEASE" = true ] && flags="--prerelease"
+          if ! gh release view "$tag" --repo "$RELEASES_REPO" >/dev/null 2>&1; then
+            # shellcheck disable=SC2086
+            gh release create "$tag" --repo "$RELEASES_REPO" --title "PulseEight Control $VERSION" --notes-file notes/notes.md $flags
+          fi
+          gh release upload "$tag" --repo "$RELEASES_REPO" --clobber files/*.dmg files/*.exe files/SHA256SUMS
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-notes
+          path: notes/
+          if-no-files-found: error
+
+  # Signs the Windows installers and the feeds, and adds this release to the three feeds. On macOS because
+  # the signing script uses CryptoKit; it is a couple of minutes. A pre-release is published for testing and
+  # is not offered to installed apps.
+  offer:
+    name: Offer to installed apps
+    needs: [verify, publish]
+    if: ${{ needs.verify.outputs.publish == 'true' && needs.verify.outputs.prerelease != 'true' }}
+    runs-on: macos-26
+    timeout-minutes: 20
+    env:
+      VERSION: ${{ needs.verify.outputs.version }}
+      RELEASES_REPO: ${{ vars.RELEASES_REPO }}
+      BASE: ${{ vars.UPDATE_BASE_URL }}
+      SPARKLE_PUBLIC_KEY: ${{ vars.SPARKLE_PUBLIC_KEY }}
+      BUILD: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
           path: source
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -144,46 +260,65 @@ jobs:
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: macos-release
+          pattern: "*-release*"
+          merge-multiple: true
           path: files
 
-      - name: Release notes
-        working-directory: source
-        run: |
-          previous="$(git describe --tags --abbrev=0 --match 'v*' "HEAD^" 2>/dev/null || true)"
-          python3 scripts/release/release_notes.py --since "$previous" --markdown > ../notes.md
-          python3 scripts/release/release_notes.py --since "$previous" > ../notes.html
-          cat ../notes.md
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-notes
+          path: notes
 
-      - name: GitHub release in the releases repository
-        run: |
-          tag="v$VERSION"
-          flags=""
-          [ "$PRERELEASE" = true ] && flags="--prerelease"
-          if ! gh release view "$tag" --repo "$RELEASES_REPO" >/dev/null 2>&1; then
-            # shellcheck disable=SC2086
-            gh release create "$tag" --repo "$RELEASES_REPO" --title "PulseEight Control $VERSION" --notes-file notes.md $flags
-          fi
-          gh release upload "$tag" --repo "$RELEASES_REPO" --clobber files/*.dmg files/SHA256SUMS
-
-      # A pre-release is published for testing and is not offered to installed apps.
-      - name: Offer it to installed apps (feed)
-        if: ${{ env.PRERELEASE != 'true' }}
-        env:
-          BASE: ${{ vars.UPDATE_BASE_URL }}
+      - name: macOS feed
         run: |
           signature="$(sed -n 's/^signature=//p' files/signature.txt)"
           length="$(sed -n 's/^length=//p' files/signature.txt)"
           [ -n "$signature" ] || { echo "::error::The update wasn't signed (no SPARKLE_ED_PRIVATE_KEY), so it can't be offered." >&2; exit 1; }
           cd releases
           python3 ../source/scripts/release/appcast.py add appcast-macos.xml \
-            --version "${{ github.run_number }}" --short "$VERSION" \
+            --version "$BUILD" --short "$VERSION" \
             --url "https://github.com/$RELEASES_REPO/releases/download/v$VERSION/PulseEightControl-$VERSION.dmg" \
-            --length "$length" --signature "$signature" --min-os 14.0 --notes-file ../notes.html \
+            --length "$length" --signature "$signature" --min-os 14.0 --notes-file ../notes/notes.html \
             --title "PulseEight Control" --link "$BASE"
           python3 ../source/scripts/release/appcast.py validate appcast-macos.xml
+
+      # Each installer is signed and checked against the public key built into the app. NetSparkle (strict
+      # mode) also wants the feed itself signed, in a file beside it: <feed>.signature.
+      - name: Windows feeds
+        env:
+          ED25519_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          [ -n "$ED25519_PRIVATE_KEY" ] || { echo "::error::No SPARKLE_ED_PRIVATE_KEY secret, so the Windows updates can't be signed." >&2; exit 1; }
+          sign() { swift source/scripts/release/ed25519.swift sign "$1"; }
+          windows_version="$VERSION.$BUILD"
+          for arch in x64 arm64; do
+            name="PulseEightControl-Setup-$windows_version-$arch.exe"
+            installer="files/$name"
+            [ -f "$installer" ] || { echo "::error::$name is missing from the build." >&2; exit 1; }
+            result="$(sign "$installer")"
+            signature="$(printf '%s\n' "$result" | sed -n 's/^signature=//p')"
+            length="$(printf '%s\n' "$result" | sed -n 's/^length=//p')"
+            swift source/scripts/release/ed25519.swift verify "$installer" "$SPARKLE_PUBLIC_KEY" "$signature"
+
+            feed="appcast-windows-$arch.xml"
+            (cd releases && python3 ../source/scripts/release/appcast.py add "$feed" \
+              --version "$windows_version" --short "$VERSION" --os windows --signature-attribute signature \
+              --url "https://github.com/$RELEASES_REPO/releases/download/v$VERSION/$name" \
+              --length "$length" --signature "$signature" --notes-file ../notes/notes.html \
+              --title "PulseEight Control" --link "$BASE" \
+              && python3 ../source/scripts/release/appcast.py validate "$feed")
+
+            feed_signature="$(sign "releases/$feed" | sed -n 's/^signature=//p')"
+            swift source/scripts/release/ed25519.swift verify "releases/$feed" "$SPARKLE_PUBLIC_KEY" "$feed_signature"
+            printf '%s' "$feed_signature" > "releases/$feed.signature"
+          done
+
+      - name: Publish the feeds
+        working-directory: releases
+        run: |
           git config user.name "release workflow"
           git config user.email "actions@users.noreply.github.com"
-          git add appcast-macos.xml
-          git commit -m "PulseEight Control $VERSION (macOS)"
+          git add appcast-macos.xml appcast-windows-x64.xml appcast-windows-x64.xml.signature \
+                  appcast-windows-arm64.xml appcast-windows-arm64.xml.signature
+          git commit -m "PulseEight Control $VERSION"
           git push

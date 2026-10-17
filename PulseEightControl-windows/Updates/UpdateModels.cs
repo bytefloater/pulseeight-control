@@ -13,8 +13,9 @@ public sealed record UpdateOptions(
     string? DownloadFolder = null,
     string InstallerArguments = UpdateOptions.DefaultInstallerArguments)
 {
-    /// <summary>Inno Setup: show progress but ask nothing, don't reboot, and start the app again afterwards.</summary>
-    public const string DefaultInstallerArguments = "/SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS";
+    /// <summary>Inno Setup: show progress but ask nothing, don't reboot, and close the app if it is still running.
+    /// The installer's own [Run] entry starts the app again after a silent install.</summary>
+    public const string DefaultInstallerArguments = "/SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS";
 }
 
 public enum UpdateCheckStatus

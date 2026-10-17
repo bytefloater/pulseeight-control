@@ -11,10 +11,20 @@
   .\PulseEightControl-windows\build.ps1            # debug build for this PC's architecture
   .\PulseEightControl-windows\build.ps1 -Run       # build, then start the app
   .\PulseEightControl-windows\build.ps1 -Configuration Release
+
+.EXAMPLE
+  # A release build: the version the update feed compares against, where the feed is, and the key it must be signed with.
+  .\PulseEightControl-windows\build.ps1 -Configuration Release -Version 0.1.0.7 `
+      -UpdateBaseUrl https://example.github.io/releases -UpdatePublicKey <base64>
 #>
 param(
     [ValidateSet('Debug', 'Release')] [string] $Configuration = 'Debug',
-    [switch] $Run
+    [switch] $Run,
+    # <VERSION>.<build>. The feed's sparkle:version is compared against this, so it must rise with every release.
+    [string] $Version = '0.1.0.0',
+    # Compiled in only when both are given; a build without them never checks for updates.
+    [string] $UpdateBaseUrl = '',
+    [string] $UpdatePublicKey = ''
 )
 
 . (Join-Path $PSScriptRoot 'common.ps1')
@@ -43,7 +53,12 @@ Write-Host "== Copying Swift runtime from $runtime"
 Get-ChildItem $runtime -Filter '*.dll' | Copy-Item -Destination $native -Force
 
 Write-Host "== Building the Windows app ($Configuration, $platform)"
-Invoke-Native dotnet build (Join-Path $PSScriptRoot 'App') -c $Configuration "-p:Platform=$platform"
+$update = @()
+if ($UpdateBaseUrl -or $UpdatePublicKey) {
+    if (-not ($UpdateBaseUrl -and $UpdatePublicKey)) { throw 'Give both -UpdateBaseUrl and -UpdatePublicKey, or neither.' }
+    $update = @("-p:P8UpdateBaseUrl=$UpdateBaseUrl", "-p:P8UpdatePublicKey=$UpdatePublicKey")
+}
+Invoke-Native dotnet build (Join-Path $PSScriptRoot 'App') -c $Configuration "-p:Platform=$platform" "-p:P8Version=$Version" @update
 if ($LASTEXITCODE -ne 0) { throw 'dotnet build failed' }
 
 $exe = Join-Path $out "windows\bin\PulseEightControl\$($Configuration.ToLower())_win-$($platform.ToLower())\PulseEightControl.exe"

@@ -1,8 +1,9 @@
 # Releasing and updating
 
 How a version of PulseEight Control gets from this repository to people's machines, and how the installed
-apps find out about the next one. The macOS side is built and tested; the Windows installer and updater and
-the automated release workflow are described in the plan and are not built yet (see the end).
+apps find out about the next one. The macOS update path is built and tested end to end here. The Windows
+installer, updater and the release workflow are written but have only been exercised in pieces on a Mac
+(see "Windows" and "What is not verified yet" at the end).
 
 ## The moving parts
 
@@ -59,7 +60,10 @@ swift scripts/release/ed25519.swift generate
 ```
 
 The private key's format is the one Sparkle's own `generate_keys -x` exports, so you can switch to Sparkle's
-tools later without changing anything. Use a **separate key** for the Windows feeds.
+tools later without changing anything. **One key signs everything** (the macOS disk image, the Windows
+installers and the Windows feeds): the secret is `SPARKLE_ED_PRIVATE_KEY`, the public half is the repository
+variable `SPARKLE_PUBLIC_KEY` and is baked into both apps. One key is one thing to guard and back up; the
+cost is that losing it affects both platforms.
 
 ## Making a macOS release by hand
 
@@ -97,3 +101,58 @@ Accessibility permission for the terminal, shows windows briefly, and touches no
 
 The helper scripts have their own tests (`python3 scripts/run-tests.py`): the feed editor, the signer, the
 release notes, the coverage summary and the check that every pinned action is the release it claims to be.
+
+## Windows
+
+The app is a per-user installer (Inno Setup 6; no administrator prompt) built for each of x64 and ARM64, and it
+updates itself with NetSparkle's core library under our own WinUI 3 windows (`App/Updates/`).
+
+| Piece | What it does |
+|---|---|
+| `PulseEightControl-windows/build.ps1 -Configuration Release -Version <VERSION>.<build> -UpdateBaseUrl ... -UpdatePublicKey ...` | Builds the core and the app, compiling the version, feed base address and public key into the app. Without the last two the app never checks for updates. |
+| `PulseEightControl-windows/installer/build-installer.ps1 -Version <same>` | Wraps that build in `out\release\PulseEightControl-Setup-<version>-<arch>.exe`. Needs Inno Setup 6. |
+| `appcast-windows-x64.xml`, `appcast-windows-arm64.xml` | One feed per architecture, so each machine is only offered its own installer. Each has a `.signature` file beside it. |
+
+* **Version** is `<VERSION>.<run number>` (for example `0.2.0.12`). The feed's `sparkle:version` is compared
+  against the version compiled into the app, so it must rise with every release; the workflow's run number does.
+* **Signing**: NetSparkle runs in strict mode. The installer's signature is in the feed, and the feed must be
+  signed too (`appcast-windows-x64.xml.signature`, the base64 signature of the feed's exact bytes). The release
+  workflow does both, with the same key and script as macOS, in the `offer` job.
+* **What an update does**: the dialog downloads the installer, the library checks its signature, then runs it
+  with `/SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS`; the app exits, the installer replaces the files
+  and its `[Run]` entry starts the app again.
+* **The installer's identity** is the `AppId` GUID in `installer/PulseEightControl.iss`. Never change it, or the next
+  version installs beside the old one instead of replacing it.
+* **Not signed (Authenticode)**: Windows SmartScreen will warn on the first manual install ("Windows protected
+  your PC" > More info > Run anyway). Updates run by the app are not affected by that prompt. Buying a code
+  signing certificate (or Azure Trusted Signing) is the later fix; the installer script has no signing step yet.
+
+## The release workflow
+
+`.github/workflows/release.yml`, on a tag `vX.Y.Z` (the tag must match `VERSION`) or run by hand.
+
+1. `verify`: the tag, `VERSION` and the repository variables agree.
+2. `checks`: the same jobs as every pull request.
+3. `macos` and `windows` (x64 and ARM64) build in parallel and upload their files to the run.
+4. `publish`: creates the GitHub release in the **releases repository** and uploads the installers and
+   `SHA256SUMS`.
+5. `offer`: only after step 4, and not for pre-release tags (`v0.2.0-rc.1`): signs the Windows installers and the
+   feeds and pushes all three feeds to the releases repository. Between the feed and its `.signature` file
+   landing on the web, a check may fail once; the next check works.
+
+A **manual run** with "publish" off builds and signs everything and uploads it to the run only: a dry run.
+
+Repository variables: `RELEASES_REPO` (`owner/name`), `UPDATE_BASE_URL` (where the releases repository's feeds
+are served, no trailing slash), `SPARKLE_PUBLIC_KEY`. Secrets: `SPARKLE_ED_PRIVATE_KEY`, `RELEASES_REPO_TOKEN` (a
+fine-grained token that can write to the releases repository and nothing else).
+
+## What is not verified yet
+
+* Everything in `.github/workflows` has only been linted (`actionlint`) and its pieces run by hand; no workflow
+  has run on GitHub yet.
+* The Windows side was written on a Mac: the Swift core, the WinUI app, `build.ps1`, the Inno Setup script,
+  `smoke.ps1` and NetSparkle inside a WinUI 3 app have not been run. The updater library itself
+  (`PulseEight.Updates`) has 37 tests that do run on any OS.
+* A checklist to do on a Windows machine once the first CI build exists: install 0.1.0 from the installer, publish
+  a 0.1.1 to a local or test feed, check that the dialog appears, downloads, and that the app comes back as 0.1.1;
+  repeat on ARM64; uninstall from Settings > Apps.

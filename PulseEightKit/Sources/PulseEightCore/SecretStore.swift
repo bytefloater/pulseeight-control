@@ -2,6 +2,11 @@ import Foundation
 #if canImport(Security)
     import Security
 #endif
+#if canImport(Darwin)
+    import Darwin
+#elseif canImport(Glibc)
+    import Glibc
+#endif
 
 /// Where the admin password lives. Never settings.json.
 public protocol SecretStore: Sendable {
@@ -31,14 +36,17 @@ public enum SecretStores {
 
 #if canImport(Security)
     public struct KeychainSecretStore: SecretStore {
-        public static let service = "com.pulseeight.control"
+        public static let defaultService = "com.pulseeight.control"
 
-        public init() {}
+        /// The keychain service the item lives under. Tests pass their own, so they never touch the real one.
+        public var service: String
+
+        public init(service: String = defaultService) { self.service = service }
 
         private func query(_ account: String) -> [String: Any] {
             [
                 kSecClass as String: kSecClassGenericPassword,
-                kSecAttrService as String: Self.service,
+                kSecAttrService as String: service,
                 kSecAttrAccount as String: account,
             ]
         }
@@ -102,10 +110,39 @@ public struct FileSecretStore: SecretStore {
     public func setSecret(_ value: String?, for account: String) throws {
         var all = load()
         if let value, !value.isEmpty { all[account] = value } else { all[account] = nil }
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try JSONEncoder().encode(all).write(to: url, options: .atomic)
-        #if !os(Windows)
-            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        let directory = url.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let data = try JSONEncoder().encode(all)
+
+        #if os(Windows)
+            try data.write(to: url, options: .atomic)
+        #else
+            try writeRestricted(data, in: directory)
         #endif
     }
+
+    #if !os(Windows)
+        /// Writes a temporary file that is created with mode 0600 and then renamed over the real one. An
+        /// ordinary write followed by chmod leaves the password readable by other users in between, and
+        /// would keep the permissions of a file that already existed with looser ones.
+        private func writeRestricted(_ data: Data, in directory: URL) throws {
+            let temporary = directory.appendingPathComponent(".\(url.lastPathComponent).\(UUID().uuidString).tmp")
+            let descriptor = open(temporary.path, O_WRONLY | O_CREAT | O_EXCL, 0o600)
+            guard descriptor >= 0 else {
+                throw SecretStoreError(message: "Couldn't write \(url.lastPathComponent) (\(String(cString: strerror(errno))))")
+            }
+            do {
+                let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+                try handle.write(contentsOf: data)
+                try handle.synchronize()
+                try handle.close()
+                guard rename(temporary.path, url.path) == 0 else {
+                    throw SecretStoreError(message: "Couldn't replace \(url.lastPathComponent) (\(String(cString: strerror(errno))))")
+                }
+            } catch {
+                try? FileManager.default.removeItem(at: temporary)
+                throw error
+            }
+        }
+    #endif
 }

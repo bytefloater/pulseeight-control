@@ -20,13 +20,26 @@ public struct AppSettings: Codable, Equatable, Sendable {
 
     public init() {}
 
+    /// Spelled out (rather than synthesized) so the decoding below can name it. The names are the property
+    /// names, exactly what the synthesized keys were, so existing settings files keep loading.
+    enum CodingKeys: String, CodingKey {
+        case matrix, appearance, highlightGrid, showStatusBar, language
+    }
+
+    /// Each field decodes on its own: a value this version doesn't understand (a newer version's new
+    /// appearance, a hand-edited setting of the wrong type) falls back to that field's default instead of
+    /// discarding the whole file, which would lose the matrix's host.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        matrix = try c.decodeIfPresent(MatrixConfig.self, forKey: .matrix) ?? MatrixConfig()
-        appearance = try c.decodeIfPresent(Appearance.self, forKey: .appearance) ?? .system
-        highlightGrid = try c.decodeIfPresent(Bool.self, forKey: .highlightGrid) ?? true
-        showStatusBar = try c.decodeIfPresent(Bool.self, forKey: .showStatusBar) ?? true
-        language = try c.decodeIfPresent(String.self, forKey: .language) ?? Languages.systemSetting
+        matrix = Self.lenient(c, .matrix) ?? MatrixConfig()
+        appearance = Self.lenient(c, .appearance) ?? .system
+        highlightGrid = Self.lenient(c, .highlightGrid) ?? true
+        showStatusBar = Self.lenient(c, .showStatusBar) ?? true
+        language = Self.lenient(c, .language) ?? Languages.systemSetting
+    }
+
+    private static func lenient<T: Decodable>(_ container: KeyedDecodingContainer<CodingKeys>, _ key: CodingKeys) -> T? {
+        (try? container.decodeIfPresent(T.self, forKey: key)) ?? nil
     }
 
     /// Missing or unreadable files give defaults.

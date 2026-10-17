@@ -23,14 +23,16 @@ public struct MatrixConfig: Codable, Sendable, Equatable {
         case detailPollInterval = "detail_poll_interval"
     }
 
+    /// Per-field, so one bad value (say a port written as text) doesn't lose the host.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let defaults = MatrixConfig()
-        host = try c.decodeIfPresent(String.self, forKey: .host)
-        port = try c.decodeIfPresent(Int.self, forKey: .port) ?? defaults.port
-        timeout = try c.decodeIfPresent(Int.self, forKey: .timeout) ?? defaults.timeout
-        pollInterval = try c.decodeIfPresent(Int.self, forKey: .pollInterval) ?? defaults.pollInterval
-        detailPollInterval = try c.decodeIfPresent(Int.self, forKey: .detailPollInterval) ?? defaults.detailPollInterval
+        func value<T: Decodable>(_ key: CodingKeys) -> T? { (try? c.decodeIfPresent(T.self, forKey: key)) ?? nil }
+        host = value(.host)
+        port = value(.port) ?? defaults.port
+        timeout = value(.timeout) ?? defaults.timeout
+        pollInterval = value(.pollInterval) ?? defaults.pollInterval
+        detailPollInterval = value(.detailPollInterval) ?? defaults.detailPollInterval
     }
 }
 

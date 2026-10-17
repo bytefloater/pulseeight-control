@@ -11,6 +11,8 @@ public final class FakeMatrixServer: @unchecked Sendable {
     private let lock = NSLock()
     private var listener: Sockets.Handle?
     private var boundPort: UInt16 = 0
+    private var stopping = false
+    private var acceptorFinished = DispatchSemaphore(value: 0)
 
     /// - Parameter port: 0 picks a free port (read it back from `port` after `start()`).
     /// - Parameter log: called with one line per request; nil is silent.
@@ -27,33 +29,67 @@ public final class FakeMatrixServer: @unchecked Sendable {
     /// Binds the port and starts serving on background threads.
     public func start() throws {
         let handle = try Sockets.makeListener(host: host, port: requestedPort)
+        let finished = DispatchSemaphore(value: 0)
         lock.lock()
         listener = handle
         boundPort = Sockets.port(of: handle)
+        stopping = false
+        acceptorFinished = finished
         lock.unlock()
 
-        let thread = Thread { [self] in acceptLoop(handle) }
+        let thread = Thread { [self] in
+            acceptLoop(handle)
+            finished.signal()
+        }
         thread.name = "FakeMatrixServer.accept"
         thread.start()
     }
 
-    /// Stops accepting; requests already being served finish.
+    /// Stops accepting and returns once the port is free; requests already being served finish.
+    ///
+    /// The accept thread owns the listening socket and is the only one that closes it. Closing it from
+    /// here, while that thread is (or is about to be) inside `accept`, let the descriptor number be reused
+    /// by the next server's listener, and the dead server's thread then answered that server's clients.
     public func stop() {
         lock.lock()
-        let handle = listener
+        guard listener != nil else {
+            lock.unlock()
+            return
+        }
         listener = nil
+        stopping = true
+        let port = boundPort
+        let finished = acceptorFinished
         lock.unlock()
-        if let handle { Sockets.closeHandle(handle) }
+
+        // Wake the thread out of `accept`; it sees the flag, closes the listener and exits.
+        Sockets.connectOnce(host: host == "0.0.0.0" ? "127.0.0.1" : host, port: port)
+        _ = finished.wait(timeout: .now() + 5)
     }
 
     deinit { stop() }
 
     // MARK: Serving
 
+    private var isStopping: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return stopping
+    }
+
     private func acceptLoop(_ handle: Sockets.Handle) {
-        while true {
+        // Sole owner of the listener: it is closed here, after the last `accept`, never from `stop()`.
+        defer { Sockets.closeHandle(handle) }
+        while !isStopping {
             let client = Sockets.acceptClient(handle)
-            if client == Sockets.invalid { return } // listener closed
+            if isStopping {
+                if client != Sockets.invalid { Sockets.closeHandle(client) } // the wake-up connection
+                return
+            }
+            if client == Sockets.invalid {
+                Thread.sleep(forTimeInterval: 0.01) // transient failure (e.g. out of descriptors): keep serving
+                continue
+            }
             let thread = Thread { [self] in
                 serve(client)
                 Sockets.closeHandle(client)

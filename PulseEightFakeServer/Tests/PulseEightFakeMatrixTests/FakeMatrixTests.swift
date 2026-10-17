@@ -133,6 +133,26 @@ import PulseEightKit
         #expect(try await client.ports().first { $0.mode == .output && $0.bay == 1 }?.receiveFrom == 4)
     }
 
+    /// Regression for an intermittent failure of `servesTheClientsOverSockets`: stopping a server right after
+    /// starting it used to leave its accept thread alive, and when that thread finally called `accept` the
+    /// freed descriptor number had been reused by the next server's listener. The dead server then answered
+    /// that server's clients from its own, different matrix.
+    @Test func aStoppedServerNeverAnswersALaterServersClients() async throws {
+        let transport = makeDefaultTransport(timeout: 5)
+        for round in 0..<300 {
+            let dead = try startServer()
+            dead.stop() // immediately, so its accept thread may not have started waiting yet
+            let live = try startServer() // typically reuses the descriptor number `dead` just freed
+            defer { live.stop() }
+
+            let client = try MatrixClient(host: "127.0.0.1", port: Int(live.port), transport: transport)
+            _ = try await client.setPort(input: 4, output: 1)
+            let source = try await client.ports().first { $0.mode == .output && $0.bay == 1 }?.receiveFrom
+            #expect(source == 4, "round \(round): the live server's own matrix should have answered")
+            if source != 4 { break }
+        }
+    }
+
     @Test func answersUnknownPathsWith404() async throws {
         let server = try startServer()
         defer { server.stop() }

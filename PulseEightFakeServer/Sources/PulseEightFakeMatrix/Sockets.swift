@@ -143,6 +143,35 @@ enum Sockets {
         }
     }
 
+    /// Opens and immediately closes one connection to `host:port`. Used to wake a thread blocked in
+    /// `accept` on a listener that is shutting down. Closing the listening descriptor from another thread
+    /// neither reliably wakes that thread nor is it safe: the descriptor number can be reused by a new
+    /// socket before the thread calls `accept` again.
+    static func connectOnce(host: String, port: UInt16) {
+        _ = startOnce
+        guard var address = try? makeAddress(host: host, port: port) else { return }
+
+        #if os(Windows)
+        let handle = socket(AF_INET, SOCK_STREAM, 6 /* IPPROTO_TCP */)
+        #elseif canImport(Glibc)
+        let handle = socket(AF_INET, Int32(SOCK_STREAM.rawValue), 0)
+        #else
+        let handle = socket(AF_INET, SOCK_STREAM, 0)
+        #endif
+        guard handle != invalid else { return }
+        defer { closeHandle(handle) }
+
+        _ = withUnsafePointer(to: &address) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { generic in
+                #if os(Windows)
+                connect(handle, generic, Int32(MemoryLayout<sockaddr_in>.size))
+                #else
+                connect(handle, generic, socklen_t(MemoryLayout<sockaddr_in>.size))
+                #endif
+            }
+        }
+    }
+
     static func closeHandle(_ handle: Handle) {
         #if os(Windows)
         _ = closesocket(handle)

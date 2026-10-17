@@ -10,6 +10,8 @@ let package = Package(
     platforms: [.macOS(.v14)],
     dependencies: [
         .package(path: "../PulseEightKit"),
+        // Test-only: the in-process fake matrix the model tests run against.
+        .package(path: "../PulseEightFakeServer"),
     ],
     targets: [
         .executableTarget(
@@ -28,6 +30,16 @@ let package = Package(
                 // name. Embedding an Info.plist in the binary supplies the identity until the app
                 // is packaged properly.
                 .unsafeFlags(["-Xlinker", "-sectcreate", "-Xlinker", "__TEXT", "-Xlinker", "__info_plist", "-Xlinker", "Info.plist"]),
+            ]
+        ),
+        // The model and its flows, against an in-process fake matrix (no UI is created).
+        .testTarget(
+            name: "PulseEightControlTests",
+            dependencies: [
+                "PulseEightControl",
+                .product(name: "PulseEightKit", package: "PulseEightKit"),
+                .product(name: "PulseEightCore", package: "PulseEightKit"),
+                .product(name: "PulseEightFakeMatrix", package: "PulseEightFakeServer"),
             ]
         ),
     ]

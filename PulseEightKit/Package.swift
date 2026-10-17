@@ -25,5 +25,7 @@ let package = Package(
             resources: [.copy("Fixtures")]
         ),
         .testTarget(name: "PulseEightCoreTests", dependencies: ["PulseEightCore", "PulseEightKit"]),
+        // The C interface called from Swift, as the Windows app calls it from C#.
+        .testTarget(name: "PulseEightCoreExportsTests", dependencies: ["PulseEightCoreExports", "PulseEightCore"]),
     ]
 )

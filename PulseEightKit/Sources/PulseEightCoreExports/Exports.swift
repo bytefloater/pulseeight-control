@@ -61,6 +61,9 @@ public func p8_destroy(_ pointer: UnsafeMutableRawPointer?) {
     handle.lock.lock()
     handle.callback = nil
     handle.lock.unlock()
+    // Without this the core's polling loops would outlive the handle and keep talking to the matrix.
+    let core = handle.core
+    blocking { await core.stop() }
 }
 
 /// Current state as a JSON snapshot (see docs/core-interface.md).

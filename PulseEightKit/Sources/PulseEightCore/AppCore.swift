@@ -167,6 +167,25 @@ public final class AppCore: @unchecked Sendable {
         await store.start()
     }
 
+    /// Stops polling and drops the connection; `start()` begins again. Releasing the core does the same, so
+    /// one that is simply let go of doesn't keep talking to the matrix.
+    public func stop() async {
+        let store: MatrixStore? = locked {
+            let current = self.store
+            self.store = nil
+            latestState = nil
+            publishedKey = nil
+            _phase = computePhase()
+            return current
+        }
+        await store?.stop()
+    }
+
+    deinit {
+        // A MatrixStore keeps itself alive through its polling tasks, so it has to be told to stop.
+        if let store { Task { await store.stop() } }
+    }
+
     /// Poll right now instead of waiting for the next tick.
     public func retry() async throws {
         try await requireStore().reconnect()

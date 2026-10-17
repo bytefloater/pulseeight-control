@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using PulseEight.Core;
+using PulseEightControl.Updates;
 
 namespace PulseEightControl.Views;
 
@@ -11,6 +12,7 @@ internal sealed class SettingsView : UserControl
     private static readonly string[] Appearances = ["system", "light", "dark"];
 
     private readonly CoreClient _core;
+    private readonly UpdateController _updates;
     private readonly TextBox _host = new() { Width = 200, PlaceholderText = "192.168.1.150" };
     private readonly TextBox _port = new() { Width = 120 };
     private readonly TextBox _timeout = new() { Width = 120 };
@@ -26,13 +28,17 @@ internal sealed class SettingsView : UserControl
     private readonly ToggleSwitch _highlight = new() { OnContent = "", OffContent = "", MinWidth = 0 };
     private readonly ToggleSwitch _statusBar = new() { OnContent = "", OffContent = "", MinWidth = 0 };
     private readonly TextBlock _passwordNote = Ui.Text("", "CaptionTextBlockStyle", secondary: true, wrap: true);
+    private readonly ToggleSwitch _autoUpdates = new() { OnContent = "", OffContent = "", MinWidth = 0 };
+    private readonly Button _checkNow = new() { Content = Loc.T("settings.updates.checkNow") };
+    private readonly TextBlock _updateStatus = Ui.Text("", "CaptionTextBlockStyle", secondary: true, wrap: true);
 
     private bool _loading;
     private bool _loadedOnce;
 
-    public SettingsView(CoreClient core)
+    public SettingsView(CoreClient core, UpdateController updates)
     {
         _core = core;
+        _updates = updates;
         foreach (var key in new[] { "theme.system", "theme.light", "theme.dark" }) _appearance.Items.Add(Loc.T(key));
         _password.PlaceholderText = Loc.T("settings.password.placeholder");
 
@@ -51,6 +57,8 @@ internal sealed class SettingsView : UserControl
         };
         _highlight.Toggled += async (_, _) => { if (!_loading) await _core.SetHighlightGridAsync(_highlight.IsOn); };
         _statusBar.Toggled += async (_, _) => { if (!_loading) await _core.SetShowStatusBarAsync(_statusBar.IsOn); };
+        _autoUpdates.Toggled += async (_, _) => { if (!_loading) await _core.SetCheckForUpdatesAsync(_autoUpdates.IsOn); };
+        _checkNow.Click += async (_, _) => await _updates.CheckNowAsync();
 
         Content = Ui.Page(Build());
     }
@@ -86,6 +94,11 @@ internal sealed class SettingsView : UserControl
             Ui.Row(Loc.T("settings.highlight"), _highlight, Loc.T("settings.highlight.caption")),
             Ui.Row(Loc.T("settings.statusBar"), _statusBar))));
 
+        page.Children.Add(Ui.Section(Loc.T("settings.updates"), Ui.Card(
+            Ui.Row(Loc.T("settings.updates.auto"), _autoUpdates, Loc.T("settings.updates.auto.caption")),
+            Ui.Row(Loc.T("settings.updates.checkNow"), _checkNow, null))));
+        page.Children.Add(_updateStatus);
+
         return page;
     }
 
@@ -109,6 +122,7 @@ internal sealed class SettingsView : UserControl
             _language.SelectedIndex = Math.Max(0, _languageCodes.IndexOf(settings.Language));
             _highlight.IsOn = settings.HighlightGrid;
             _statusBar.IsOn = settings.ShowStatusBar;
+            _autoUpdates.IsOn = settings.CheckForUpdates;
             _removePassword.IsEnabled = snapshot.AdminConfigured;
             _passwordNote.Text = snapshot.AdminConfigured
                 ? Loc.T("settings.passwordSaved")
@@ -122,6 +136,22 @@ internal sealed class SettingsView : UserControl
             }
         }
         finally { _loading = false; }
+        ShowUpdateState();
+    }
+
+    /// <summary>Version and last check, or why there is nothing to check. Called with every snapshot and
+    /// whenever the updater's state changes.</summary>
+    public void ShowUpdateState()
+    {
+        var available = _updates.IsAvailable;
+        _autoUpdates.IsEnabled = available;
+        _checkNow.IsEnabled = available && !_updates.Busy;
+        _updateStatus.Text = !available
+            ? Loc.T("settings.updates.unavailable")
+            : Loc.F("settings.updates.version", _updates.InstalledVersion) + "  \u00b7  " +
+              (_updates.LastChecked is { } checkedAt
+                  ? Loc.F("settings.updates.lastChecked", checkedAt.ToLocalTime().ToString("g"))
+                  : Loc.T("settings.updates.neverChecked"));
     }
 
     private void Reload(SettingsSnapshot settings)

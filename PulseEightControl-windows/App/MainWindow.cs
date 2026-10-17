@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using PulseEight.Core;
+using PulseEightControl.Updates;
 using PulseEightControl.Views;
 using Windows.Graphics;
 using Windows.System;
@@ -14,6 +15,7 @@ namespace PulseEightControl;
 public sealed class MainWindow : Window
 {
     private readonly CoreClient _core = new();
+    private readonly UpdateController _updates;
     private readonly TitleBar _titleBar = new();
     private readonly NavigationView _navigation = new();
     private readonly Border _content = new();
@@ -45,7 +47,9 @@ public sealed class MainWindow : Window
 
         _routing = new RoutingView(_core, port => _ = PortDialog.ShowAsync(_core, port, _snapshot));
         _hardware = new HardwareView(_core, port => _ = PortDialog.ShowAsync(_core, port, _snapshot));
-        _settings = new SettingsView(_core);
+        _updates = new UpdateController(DispatcherQueue, () => _snapshot.Settings.CheckForUpdates);
+        _updates.Changed += () => _settings.ShowUpdateState();
+        _settings = new SettingsView(_core, _updates);
         _connection = new ConnectionView(_core, SelectSettings);
 
         _routingItem = new NavigationViewItem { Content = Loc.T("nav.routing"), Tag = "routing", Icon = new FontIcon { Glyph = "" } };
@@ -85,6 +89,7 @@ public sealed class MainWindow : Window
             _routing.Invalidate();
             _hardware.Invalidate();
             Refresh();
+            _updates.StartAutomaticChecks(); // dialogs can be shown from here on
         };
         _navigation.Loaded += (_, _) =>
         {
@@ -119,7 +124,7 @@ public sealed class MainWindow : Window
         Title = Loc.T("app.title");
         _titleBar.Title = Loc.T("app.title");
         ApplyNavigationText();
-        _settings = new SettingsView(_core);
+        _settings = new SettingsView(_core, _updates);
         _connection = new ConnectionView(_core, SelectSettings);
         _routing.Invalidate();
         _hardware.Invalidate();
@@ -225,6 +230,7 @@ public sealed class MainWindow : Window
 
     private void Shutdown()
     {
+        _updates.Dispose();
         // Disposing waits for any command still talking to the matrix; don't hold the window open for it.
         Task.Run(_core.Dispose).Wait(TimeSpan.FromSeconds(2));
     }

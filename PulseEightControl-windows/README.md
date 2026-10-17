@@ -80,3 +80,12 @@ asked, or writes `crash.log`. It needs an interactive desktop session (not SSH o
   Settings > Language switches it. See `../docs/localisation.md`.
 * The admin password is kept in a plain file under `%APPDATA%\PulseEightControl` until the core gains
   Windows Credential Manager support.
+
+## Updates in the app
+
+`App/Updates/UpdateController.cs` checks about 30 seconds after start and then daily (when Settings > Updates > "Check for updates automatically" is on); `UpdateDialog.cs` shows the offer, downloads inside the dialog and hands over to the installer. Both are compiled only against the UI-free `PulseEight.Updates`.
+
+A normal build has no feed or key, so it never checks (Settings says so). Release builds pass `-p:P8Version=<VERSION>.<build> -p:P8UpdateBaseUrl=<feed base URL> -p:P8UpdatePublicKey=<base64 Ed25519 public key>`; the version is what the feed's `sparkle:version` is compared against.
+
+These WinUI files have not been compiled on a Mac; the first Windows build (CI or `build.ps1`) is their first check.
+

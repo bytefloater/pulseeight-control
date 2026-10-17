@@ -27,6 +27,19 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>
 
+  <!-- The version the update feed is compared against, as <VERSION>.<build> (the release workflow passes
+       -p:P8Version=...). The feed address and public key are compiled in only for release builds
+       (-p:P8UpdateBaseUrl=... -p:P8UpdatePublicKey=...); without them the app never looks for updates. -->
+  <PropertyGroup>
+    <P8Version Condition="'$(P8Version)' == ''">0.1.0.0</P8Version>
+    <Version>$(P8Version)</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(P8UpdateBaseUrl)' != '' And '$(P8UpdatePublicKey)' != ''">
+    <AssemblyMetadata Include="UpdateBaseUrl" Value="$(P8UpdateBaseUrl)" />
+    <AssemblyMetadata Include="UpdatePublicKey" Value="$(P8UpdatePublicKey)" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260921001" />
   </ItemGroup>
@@ -41,6 +54,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Core\PulseEight.Core.csproj" />
+    <ProjectReference Include="..\Updates\PulseEight.Updates.csproj" />
   </ItemGroup>
 
 </Project>

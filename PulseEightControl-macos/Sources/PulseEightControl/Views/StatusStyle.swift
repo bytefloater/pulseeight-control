@@ -1,26 +1,26 @@
 import PulseEightKit
-import SwiftCrossUI
+import SwiftUI
 
 extension PortStatus {
     /// Same meaning as the old web UI's status dots (OK / warning / no signal / not present).
     var color: Color {
         switch self {
-        case .ok: Color.system(.green)
-        case .warning: Color.system(.orange)
-        case .moduleFault: Color.system(.red)
-        case .noSignal: Color.gray
-        case .moduleNotPresent: Color.gray.opacity(0.4)
+        case .ok: .green
+        case .warning: .orange
+        case .moduleFault: .red
+        case .noSignal: .gray
+        case .moduleNotPresent: .gray.opacity(0.4)
         }
     }
 }
 
 struct StatusDot: View {
     var status: PortStatus
-    var size = 8
+    var size: CGFloat = 8
 
     var body: some View {
         Circle()
-            .foregroundColor(status.color)
-            .frame(width: Double(size), height: Double(size))
+            .fill(status.color)
+            .frame(width: size, height: size)
     }
 }

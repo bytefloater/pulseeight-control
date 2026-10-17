@@ -1,24 +1,43 @@
-import AppKitBackend
+import AppKit
 import PulseEightCore
-import SwiftCrossUI
+import SwiftUI
 
 @main
 struct PulseEightControlApp: App {
-    @State var model = AppModel()
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+    @State private var model = AppModel()
 
-    // The menu bar is built natively in MacChrome (with real shortcuts), and Settings is a native
-    // SwiftUI window (NativeSettings), so this scene is only the main window.
     var body: some Scene {
-        WindowGroup("PulseEight Control") {
+        // A single window (not a WindowGroup), so there is no File > New Window.
+        Window("PulseEight Control", id: "main") {
             RootView(model: model)
-                .preferredColorScheme(colorScheme)
+                .preferredColorScheme(model.settings.appearance.colorScheme)
                 .task { await model.start() }
         }
         .defaultSize(width: 900, height: 660)
+        .commands { AppCommands(model: model) }
+
+        Settings {
+            SettingsView(model: model)
+                .preferredColorScheme(model.settings.appearance.colorScheme)
+        }
+    }
+}
+
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // An unbundled executable starts as a background process; make it a normal foreground app.
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+}
+
+extension Appearance {
+    /// nil follows the system.
     var colorScheme: ColorScheme? {
-        switch model.settings.appearance {
+        switch self {
         case .system: nil
         case .light: .light
         case .dark: .dark

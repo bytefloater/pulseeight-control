@@ -1,20 +1,16 @@
 import PulseEightKit
-import SwiftCrossUI
+import SwiftUI
 
-/// Bottom status bar: connection first, then whatever else is worth knowing, each item
-/// separated by a divider.
+/// Bottom status bar: connection first, then whatever else is worth knowing.
 struct StatusBar: View {
     var model: AppModel
 
     var body: some View {
-        let items = statusItems
         VStack(spacing: 0) {
             Divider()
             HStack(spacing: 10) {
-                ForEach(items) { item in
-                    if item.id != items.first?.id {
-                        Divider().frame(height: 14)
-                    }
+                ForEach(Array(statusItems.enumerated()), id: \.element.id) { index, item in
+                    if index > 0 { Divider().frame(height: 14) }
                     itemView(item)
                 }
                 Spacer()
@@ -23,37 +19,35 @@ struct StatusBar: View {
             .padding(.horizontal, 12)
             .frame(height: 32)
         }
-        // Size must not depend on content: a size change in a child makes SwiftCrossUI re-run
-        // every ancestor's body, which would rebuild the routing grid on each poll.
-        .frame(maxWidth: .infinity)
-        .frame(height: 33)
+        .background(.bar)
     }
 
     @ViewBuilder
-    func itemView(_ item: StatusItem) -> some View {
+    private func itemView(_ item: StatusItem) -> some View {
         switch item.kind {
         case .connection:
             HStack(spacing: 6) {
-                Circle().foregroundColor(dotColor).frame(width: 9, height: 9)
+                Circle().fill(dotColor).frame(width: 9, height: 9)
                 Text(model.connectionSummary)
             }
         case .updates:
             Button(item.text) { model.page = .hardware }
+                .buttonStyle(.link)
         case .text:
             Text(item.text)
         }
     }
 
-    var dotColor: Color {
+    private var dotColor: Color {
         switch model.phase {
-        case .connected: Color.system(.green)
-        case .connecting: Color.system(.orange)
-        case .notConfigured: Color.gray
-        case .disconnected: Color.system(.red)
+        case .connected: .green
+        case .connecting: .orange
+        case .notConfigured: .gray
+        case .disconnected: .red
         }
     }
 
-    var statusItems: [StatusItem] {
+    private var statusItems: [StatusItem] {
         var items = [StatusItem(id: "connection", kind: .connection, text: "")]
         if model.adminConfigured {
             items.append(StatusItem(id: "admin", kind: .text, text: "Admin enabled"))
@@ -78,40 +72,34 @@ struct StatusItem: Identifiable {
     var text: String
 }
 
-/// Replaces a page's content while the matrix is unreachable. The old web UI used a modal here;
-/// SwiftCrossUI has no semantic background colours, so a full-page state reads better in both themes.
+/// Replaces the page while the matrix is unreachable.
 struct ConnectionPanel: View {
     var model: AppModel
+    @Environment(\.openMatrixSettings) private var openSettings
 
     var body: some View {
-        VStack(spacing: 16) {
+        Group {
             switch model.phase {
             case .notConfigured:
                 ContentUnavailableView {
-                    Text("No matrix configured")
+                    Label("No matrix configured", systemImage: "network.slash")
                 } description: {
                     Text("Enter your NeoMatrix's IP address in Settings to get started.")
                 } actions: {
-                    Button("Open Settings") { model.openSettings() }
+                    Button("Open Settings") { openSettings() }
                 }
             case .connecting:
                 ProgressView("Connecting to \(model.hostLabel)…")
             case .disconnected(let reason):
                 ContentUnavailableView {
-                    Text("Can't reach the matrix")
+                    Label("Can't reach the matrix", systemImage: "exclamationmark.triangle")
                 } description: {
-                    VStack(spacing: 4) {
-                        Text("No response from \(model.hostLabel).")
-                        if let reason {
-                            Text(reason).font(.caption)
-                        }
-                    }
+                    Text("No response from \(model.hostLabel).")
+                    if let reason { Text(reason) }
                 } actions: {
-                    HStack {
-                        Button(model.retrying ? "Retrying…" : "Retry now") { model.retry() }
-                            .disabled(model.retrying)
-                        Button("Open Settings") { model.openSettings() }
-                    }
+                    Button(model.retrying ? "Retrying…" : "Retry now") { model.retry() }
+                        .disabled(model.retrying)
+                    Button("Open Settings") { openSettings() }
                 }
             case .connected:
                 EmptyView()

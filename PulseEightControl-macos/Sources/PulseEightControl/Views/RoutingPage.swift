@@ -1,230 +1,186 @@
 import PulseEightKit
-import SwiftCrossUI
-
-#if canImport(Observation)
-    import Observation
-#endif
-
-/// Tells grid tiles when the pointer enters or leaves a row or column. Each tile keeps its own
-/// highlighted flag in `@State` and registers a sink here, so a pointer move updates only the
-/// tiles in the affected row and column and nothing else. Observation can't be used: Swift
-/// merges nested observation tracking, so an `@Observable` read in a tile would also make every
-/// ancestor (the whole page) re-run its body, rebuilding all ~270 tiles, on each pointer move.
-@Observable
-final class HoverRelay {
-    struct Position: Equatable {
-        var input: Int?
-        var output: Int?
-    }
-
-    enum Tile: Hashable {
-        case cell(input: Int, output: Int)
-        case columnHeader(input: Int)
-        case rowHeader(output: Int)
-    }
-
-    @ObservationIgnored var current: Position?
-    @ObservationIgnored private var sinks: [Tile: (Bool) -> Void] = [:]
-
-    func register(_ tile: Tile, sink: @escaping (Bool) -> Void) {
-        sinks[tile] = sink
-    }
-
-    func set(_ position: Position?) {
-        let previous = current
-        current = position
-        for (tile, sink) in sinks {
-            let was = Self.isHighlighted(tile, previous)
-            let now = Self.isHighlighted(tile, position)
-            if was != now { sink(now) }
-        }
-    }
-
-    static func isHighlighted(_ tile: Tile, _ position: Position?) -> Bool {
-        guard let position else { return false }
-        switch tile {
-        case .cell(let input, let output): return position.input == input || position.output == output
-        case .columnHeader(let input): return position.input == input
-        case .rowHeader(let output): return position.output == output
-        }
-    }
-}
+import SwiftUI
 
 enum GridStyle {
-    /// Tiles are `pitch - gap` square and separated by `gap` (stack spacing, not per-tile padding:
-    /// every wrapper is another AppKit-backed node, and the page is built on each tab switch).
-    static let pitch = 28
-    static let gap = 4
-    static let rowHeaderWidth = 156
-    static let idleFill = Color.gray.opacity(0.12)
+    /// Tiles are `pitch - gap` square and separated by `gap`.
+    static let pitch: CGFloat = 28
+    static let gap: CGFloat = 4
+    static let tile = pitch - gap
+    static let rowHeaderWidth: CGFloat = 152
+    static let columnHeaderMinHeight: CGFloat = 96
+    static let idleFill = Color.primary.opacity(0.07)
     /// Row and column under the pointer. Status colours (blue, orange, dots) are left alone.
-    static let highlightFill = Color.gray.opacity(0.34)
-    static let columnHeaderMinHeight = 96
+    static let highlightFill = Color.primary.opacity(0.2)
 
     /// Tall enough for the longest input name once rotated (names are at most 13 characters),
     /// plus the status dot.
-    static func columnHeaderHeight(for inputs: [MatrixPort]) -> Int {
+    static func columnHeaderHeight(for inputs: [MatrixPort]) -> CGFloat {
         let longest = inputs.map { $0.name.count }.max() ?? 0
-        return max(columnHeaderMinHeight, 50 + Int(Double(longest) * 7.6))
+        return max(columnHeaderMinHeight, 50 + CGFloat(longest) * 7.6)
     }
+}
+
+/// What the pointer is over: a crosspoint, or just a header (one of the two is nil).
+private struct HoverPosition: Equatable {
+    var input: Int?
+    var output: Int?
 }
 
 /// The crosspoint grid: inputs across, outputs down, one cell per pair. The blue cell in each row
 /// is the input currently routed to that output. Headers are part of the grid.
 struct RoutingPage: View {
     @Bindable var model: AppModel
-    @State var relay = HoverRelay()
+    @State private var hover: HoverPosition?
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.self) private var environment
 
     var body: some View {
         let inputs = model.inputs
         let outputs = model.outputs
-        let headerHeight = GridStyle.columnHeaderHeight(for: inputs)
-        PageScroll(alignment: .topLeading, scrollsHorizontally: true) {
-            VStack(alignment: .leading, spacing: 16) {
-                if inputs.isEmpty || outputs.isEmpty {
-                    Text("The matrix reported no ports.")
-                } else {
-                    grid(inputs: inputs, outputs: outputs, headerHeight: headerHeight)
+        GeometryReader { geometry in
+            ScrollView([.horizontal, .vertical]) {
+                Group {
+                    if inputs.isEmpty || outputs.isEmpty {
+                        Text("The matrix reported no ports.").foregroundStyle(.secondary)
+                    } else {
+                        grid(inputs: inputs, outputs: outputs)
+                    }
                 }
+                .padding(24)
+                // Keep the grid in the top-left corner; a scroll view otherwise centres short content.
+                .frame(minWidth: geometry.size.width, minHeight: geometry.size.height, alignment: .topLeading)
             }
-            .padding(24)
         }
-        .alert($model.routeError) {
+        .alert("Couldn't change the route", isPresented: routeErrorBinding, presenting: model.routeError) { _ in
             Button("OK") {}
+        } message: { message in
+            Text(message)
         }
     }
 
-    func grid(inputs: [MatrixPort], outputs: [MatrixPort], headerHeight: Int) -> some View {
+    private var routeErrorBinding: Binding<Bool> {
+        Binding(get: { model.routeError != nil }, set: { if !$0 { model.routeError = nil } })
+    }
+
+    private func grid(inputs: [MatrixPort], outputs: [MatrixPort]) -> some View {
+        let headerHeight = GridStyle.columnHeaderHeight(for: inputs)
         let highlight = model.settings.highlightGrid
         return VStack(alignment: .leading, spacing: GridStyle.gap) {
             HStack(spacing: GridStyle.gap) {
-                Text("").frame(width: Double(GridStyle.rowHeaderWidth - GridStyle.gap), height: Double(headerHeight - GridStyle.gap))
+                Color.clear.frame(width: GridStyle.rowHeaderWidth - GridStyle.gap, height: headerHeight - GridStyle.gap)
                 ForEach(inputs) { input in
-                    ColumnHeaderTile(
-                        relay: relay,
-                        port: input,
-                        height: headerHeight,
-                        onHover: { setHover($0, input: input.bay, output: nil, enabled: highlight) },
-                        onTap: { model.openPort(PortSelection(mode: .input, bay: input.bay)) }
-                    )
+                    columnHeader(input, height: headerHeight, highlighted: highlight && hover?.input == input.bay)
                 }
             }
             ForEach(outputs) { output in
                 HStack(spacing: GridStyle.gap) {
-                    RowHeaderTile(
-                        relay: relay,
-                        port: output,
-                        onHover: { setHover($0, input: nil, output: output.bay, enabled: highlight) },
-                        onTap: { model.openPort(PortSelection(mode: .output, bay: output.bay)) }
-                    )
+                    rowHeader(output, highlighted: highlight && hover?.output == output.bay)
                     ForEach(inputs) { input in
-                        GridCell(
-                            relay: relay,
-                            input: input.bay,
-                            output: output.bay,
-                            active: output.receiveFrom == input.bay,
-                            pending: model.pendingRoutes.contains(RouteKey(input: input.bay, output: output.bay)),
-                            onHover: { setHover($0, input: input.bay, output: output.bay, enabled: highlight) },
-                            onTap: { model.route(input: input.bay, output: output.bay) }
-                        )
+                        cell(input: input, output: output, highlighted: highlight && isHighlighted(input: input.bay, output: output.bay))
                     }
                 }
             }
         }
     }
 
-    func setHover(_ hovering: Bool, input: Int?, output: Int?, enabled: Bool) {
-        guard enabled else { return }
-        let position = HoverRelay.Position(input: input, output: output)
+    private func isHighlighted(input: Int, output: Int) -> Bool {
+        guard let hover else { return false }
+        return hover.input == input || hover.output == output
+    }
+
+    private func setHover(_ hovering: Bool, input: Int?, output: Int?) {
+        let position = HoverPosition(input: input, output: output)
         if hovering {
-            relay.set(position)
-        } else if relay.current == position {
+            hover = position
+        } else if hover == position {
             // Only clear if we're still on this item; the next one's enter may have arrived first.
-            relay.set(nil)
+            hover = nil
         }
     }
-}
 
-/// Input name running up the column, with the status dot at the bottom, inside the tile.
-struct ColumnHeaderTile: View {
-    var relay: HoverRelay
-    var port: MatrixPort
-    var height: Int
-    var onHover: (Bool) -> Void
-    var onTap: () -> Void
+    // MARK: Tiles
 
-    @State var highlighted = false
-
-    var body: some View {
-        let _ = relay.register(.columnHeader(input: port.bay)) { [binding = $highlighted] in binding.wrappedValue = $0 }
-        VStack(spacing: 8) {
-            RotatedLabel(text: port.name)
-                .frame(height: Double(height - 44), alignment: .bottom)
-            StatusDot(status: port.status)
+    private func columnHeader(_ port: MatrixPort, height: CGFloat, highlighted: Bool) -> some View {
+        Button {
+            model.openPort(PortSelection(mode: .input, bay: port.bay))
+        } label: {
+            VStack(spacing: 8) {
+                // Reads bottom-to-top, starting just above the status dot.
+                Text(port.name)
+                    .lineLimit(1)
+                    .frame(width: height - 44, alignment: .leading)
+                    .rotationEffect(.degrees(-90))
+                    .frame(width: 16, height: height - 44)
+                StatusDot(status: port.status)
+            }
+            .frame(width: GridStyle.tile, height: height - GridStyle.gap)
+            .background(highlighted ? GridStyle.highlightFill : GridStyle.idleFill, in: RoundedRectangle(cornerRadius: 4))
+            .contentShape(Rectangle())
         }
-        .frame(width: Double(GridStyle.pitch - GridStyle.gap), height: Double(height - GridStyle.gap))
-        .background(highlighted ? GridStyle.highlightFill : GridStyle.idleFill)
-        .cornerRadius(4)
-        .onHover(perform: onHover)
+        .buttonStyle(.plain)
+        .onHover { setHover($0, input: port.bay, output: nil) }
         .help("\(port.name): \(port.status.label). Click for details")
-        .onTapGesture(perform: onTap)
     }
-}
 
-struct RowHeaderTile: View {
-    var relay: HoverRelay
-    var port: MatrixPort
-    var onHover: (Bool) -> Void
-    var onTap: () -> Void
-
-    @State var highlighted = false
-
-    var body: some View {
-        let _ = relay.register(.rowHeader(output: port.bay)) { [binding = $highlighted] in binding.wrappedValue = $0 }
-        HStack(spacing: 8) {
-            Text(port.name)
-            StatusDot(status: port.status)
+    private func rowHeader(_ port: MatrixPort, highlighted: Bool) -> some View {
+        Button {
+            model.openPort(PortSelection(mode: .output, bay: port.bay))
+        } label: {
+            HStack(spacing: 8) {
+                Text(port.name).lineLimit(1)
+                StatusDot(status: port.status)
+            }
+            .padding(.horizontal, 8)
+            .frame(width: GridStyle.rowHeaderWidth - GridStyle.gap, height: GridStyle.tile, alignment: .trailing)
+            .background(highlighted ? GridStyle.highlightFill : GridStyle.idleFill, in: RoundedRectangle(cornerRadius: 4))
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 8)
-        .frame(width: Double(GridStyle.rowHeaderWidth - GridStyle.gap), height: Double(GridStyle.pitch - GridStyle.gap), alignment: .trailing)
-        .background(highlighted ? GridStyle.highlightFill : GridStyle.idleFill)
-        .cornerRadius(4)
-        .onHover(perform: onHover)
+        .buttonStyle(.plain)
+        .onHover { setHover($0, input: nil, output: port.bay) }
         .help("\(port.name): \(port.status.label). Click for details")
-        .onTapGesture(perform: onTap)
-    }
-}
-
-struct GridCell: View {
-    var relay: HoverRelay
-    var input: Int
-    var output: Int
-    var active: Bool
-    var pending: Bool
-    var onHover: (Bool) -> Void
-    var onTap: () -> Void
-
-    @State var highlighted = false
-
-    var body: some View {
-        let _ = relay.register(.cell(input: input, output: output)) { [binding = $highlighted] in binding.wrappedValue = $0 }
-        // No per-cell tooltip: it is one more view per cell, and the highlighted row and column
-        // headers already name the input and output.
-        // Text + background rather than Button (clips its label at this size) or Rectangle
-        // (taps didn't fire in the spike). The marker is the Text's own content so there is no
-        // overlay view to swallow clicks. onTapGesture has to be outermost or it never fires.
-        Text(active || pending ? "●" : "")
-            .foregroundColor(Color.white)
-            .frame(width: Double(GridStyle.pitch - GridStyle.gap), height: Double(GridStyle.pitch - GridStyle.gap))
-            .background(fill)
-            .cornerRadius(4)
-            .onHover(perform: onHover)
-            .onTapGesture(perform: onTap)
     }
 
-    var fill: Color {
-        if pending { return Color.system(.orange) }
-        if active { return Color.system(.blue) }
-        return highlighted ? GridStyle.highlightFill : GridStyle.idleFill
+    private func cell(input: MatrixPort, output: MatrixPort, highlighted: Bool) -> some View {
+        let active = output.receiveFrom == input.bay
+        let pending = model.pendingRoutes.contains(RouteKey(input: input.bay, output: output.bay))
+        return Button {
+            model.route(input: input.bay, output: output.bay)
+        } label: {
+            ZStack {
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(active ? Color.accentColor : highlighted ? GridStyle.highlightFill : GridStyle.idleFill)
+                if pending {
+                    // A change is on its way to the matrix and not yet confirmed.
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.85)
+                        // Readable on the accent fill when re-sending the already active route.
+                        .environment(\.colorScheme, active ? (accentIsLight ? .light : .dark) : colorScheme)
+                } else if active {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(glyphColor)
+                }
+            }
+            .frame(width: GridStyle.tile, height: GridStyle.tile)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { setHover($0, input: input.bay, output: output.bay) }
+        .help("\(input.name) → \(output.name)")
+    }
+
+    // MARK: Glyph contrast
+
+    /// Like system controls, glyphs on the accent fill switch to a dark variant when the accent
+    /// colour is light (yellow, say), where white would be hard to read.
+    private var accentIsLight: Bool {
+        let accent = Color.accentColor.resolve(in: environment)
+        let luminance = 0.2126 * accent.linearRed + 0.7152 * accent.linearGreen + 0.0722 * accent.linearBlue
+        return luminance > 0.5
+    }
+
+    private var glyphColor: Color {
+        accentIsLight ? Color.black.opacity(0.8) : Color.white
     }
 }

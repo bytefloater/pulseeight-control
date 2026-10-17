@@ -1,17 +1,21 @@
 import Foundation
 import PulseEightCore
+import Observation
 import PulseEightKit
-import SwiftCrossUI
-
-#if canImport(Observation)
-    import Observation
-#endif
 
 enum Page: String, CaseIterable, Identifiable, CustomStringConvertible {
     case routing, hardware
 
     var id: String { rawValue }
     var description: String { rawValue.capitalized }
+
+    /// SF Symbol for the toolbar and View menu.
+    var symbol: String {
+        switch self {
+        case .routing: "square.grid.3x3"
+        case .hardware: "cpu"
+        }
+    }
 }
 
 enum SettingsPane: String, CaseIterable, Identifiable {
@@ -94,9 +98,9 @@ final class AppModel {
     /// nil until the matrix has been reached. Changes whenever anything but poll timestamps does.
     var state: MatrixState?
     /// Just the port list, assigned only when it actually changes. The routing grid reads this so
-    /// a routine poll doesn't rebuild ~270 views.
+    /// a routine poll doesn't re-evaluate ~270 tiles.
     var ports: [MatrixPort] = []
-    /// Firmware updates available; stored for the same reason as `ports` (the window chrome reads it).
+    /// Firmware updates available; stored for the same reason as `ports`.
     private(set) var updateCount = 0
     private(set) var settings: AppSettings
     /// Stored (not derived) so views that only need to know "connected or not" don't re-run on
@@ -105,10 +109,8 @@ final class AppModel {
     private(set) var adminConfigured = false
 
     var draft: SettingsDraft
-    var page: Page? = .routing
+    var page: Page = .routing
     var settingsPane: SettingsPane = .matrix
-    /// Set by MacChrome; opens (or raises) the Settings window.
-    var openSettingsWindow: (() -> Void)?
     /// Result of the last Settings save: (text, isError).
     var settingsMessage: (text: String, isError: Bool)?
     var retrying = false
@@ -149,11 +151,6 @@ final class AppModel {
         }
     }
 
-    /// Changes whenever something the native window chrome shows changes.
-    var chromeSignature: String {
-        "\(page?.rawValue ?? "")|\(updateCount)"
-    }
-
     var inputs: [MatrixPort] { ports.filter { $0.mode == .input }.sorted { $0.bay < $1.bay } }
     var outputs: [MatrixPort] { ports.filter { $0.mode == .output }.sorted { $0.bay < $1.bay } }
 
@@ -171,8 +168,7 @@ final class AppModel {
     private var started = false
 
     /// Each assignment only happens when the value changed: assigning an observable property
-    /// notifies its readers even when the value is equal, and in SwiftCrossUI that ripples up
-    /// through every ancestor view.
+    /// notifies its readers even when the value is equal, which would re-run the views on every poll.
     private func apply(_ update: CoreUpdate) {
         if update.state != state { state = update.state }
         let newPorts = update.state?.ports ?? []
@@ -208,6 +204,10 @@ final class AppModel {
         Task {
             do {
                 try await core.route(input: input, output: output)
+                // The tick only moves once the matrix itself reports the new route.
+                await waitForState { state in
+                    state.ports.first { $0.mode == .output && $0.bay == output }?.receiveFrom == input
+                }
             } catch {
                 routeError = "Failed to set route: \(error.localizedDescription)"
             }
@@ -313,13 +313,9 @@ final class AppModel {
         core.setAppearance(appearance)
     }
 
-    // MARK: Settings window
+    // MARK: Settings
 
-    func openSettings() {
-        openSettingsWindow?()
-    }
-
-    /// Discards unsaved edits; called each time the Settings window opens.
+    /// Discards unsaved edits; called each time the Settings window appears.
     func resetDraft() {
         draft = SettingsDraft(core.settings)
         settingsMessage = nil

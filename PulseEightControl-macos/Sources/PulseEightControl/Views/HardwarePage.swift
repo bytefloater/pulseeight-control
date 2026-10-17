@@ -1,5 +1,5 @@
 import PulseEightKit
-import SwiftCrossUI
+import SwiftUI
 
 struct PortRow: Identifiable {
     var id: String
@@ -12,10 +12,10 @@ struct PortRow: Identifiable {
     var update: Bool
 }
 
-enum BacklightOption: CaseIterable, CustomStringConvertible {
+enum BacklightOption: CaseIterable, Hashable {
     case off, dim, bright
 
-    var description: String {
+    var title: String {
         switch self {
         case .off: "Off"
         case .dim: "Dim"
@@ -44,36 +44,29 @@ struct HardwarePage: View {
     @Bindable var model: AppModel
 
     var body: some View {
-        PageScroll {
-            VStack(alignment: .leading, spacing: 20) {
-                if let state = model.state {
-                    if let system = state.system {
-                        systemCard(system)
-                        Divider()
-                        featuresCard(system.features)
-                        if model.adminConfigured, system.features.backlightLED != nil || system.features.statusLED != nil {
-                            Divider()
-                            frontPanelCard(system.features)
-                        }
-                    } else {
-                        Text("System details haven't loaded yet.")
+        Form {
+            if let state = model.state {
+                if let system = state.system {
+                    systemSection(system)
+                    featuresSection(system.features)
+                    if model.adminConfigured, system.features.backlightLED != nil || system.features.statusLED != nil {
+                        frontPanelSection(system.features)
                     }
-                    Divider()
-                    updatesCard(state)
-                    Divider()
-                    portsCard(state)
+                } else {
+                    Section { Text("System details haven't loaded yet.").foregroundStyle(.secondary) }
                 }
+                updatesSection(state)
+                portsSection(state)
             }
-            .padding(24)
-            .frame(maxWidth: 640, alignment: .topLeading)
         }
+        .formStyle(.grouped)
     }
 
-    // MARK: Cards
+    // MARK: Sections
 
-    func systemCard(_ system: SystemInfo) -> some View {
+    private func systemSection(_ system: SystemInfo) -> some View {
         let d = system.details
-        return FormSection("System") {
+        return Section("System") {
             KeyValueRows(pairs: [
                 ("Model", d.model),
                 ("Firmware version", d.version),
@@ -87,8 +80,8 @@ struct HardwarePage: View {
         }
     }
 
-    func featuresCard(_ f: SystemFeatures) -> some View {
-        FormSection("Features") {
+    private func featuresSection(_ f: SystemFeatures) -> some View {
+        Section("Features") {
             KeyValueRows(pairs: [
                 ("HDBaseT", yesNo(f.hdbaset)),
                 ("HDBaseT upgrade capable", yesNo(f.hdbtUpgrade)),
@@ -104,103 +97,102 @@ struct HardwarePage: View {
         }
     }
 
-    func frontPanelCard(_ f: SystemFeatures) -> some View {
-        FormSection("Front Panel") {
+    private func frontPanelSection(_ f: SystemFeatures) -> some View {
+        Section("Front Panel") {
             if let level = f.backlight {
-                FormRow("Backlight") {
-                    Picker(of: BacklightOption.allCases, selection: backlightBinding(current: level))
-                        .pickerStyle(.segmented)
-                        .frame(width: 240)
-                        .disabled(model.backlightPending != nil)
+                Picker("Backlight", selection: backlightBinding(current: level)) {
+                    ForEach(BacklightOption.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
+                .pickerStyle(.segmented)
+                .disabled(model.backlightPending != nil)
             }
             if let on = f.statusLEDOn {
-                FormRow("Status LED") {
-                    Toggle("", isOn: statusLEDBinding(current: on))
-                        .toggleStyle(.switch)
-                        .disabled(model.statusLEDPending != nil)
-                }
+                Toggle("Status LED", isOn: statusLEDBinding(current: on))
+                    .disabled(model.statusLEDPending != nil)
             }
             if let error = model.frontPanelError {
-                Text(error).foregroundColor(Color.system(.red))
+                Text(error).foregroundStyle(.red)
             }
         }
     }
 
-    func updatesCard(_ state: MatrixState) -> some View {
-        FormSection("Firmware Updates") {
+    private func updatesSection(_ state: MatrixState) -> some View {
+        Section("Firmware Updates") {
             if state.updates.isEmpty {
-                Text("No updates detected.")
+                Text("No updates detected.").foregroundStyle(.secondary)
             } else {
                 ForEach(state.updates) { update in
-                    FormRow(update.name) {
-                        Text("Update available").foregroundColor(Color.system(.orange))
-                        if let version = update.firmwareVersion {
-                            Text("current \(version)").foregroundColor(Color.gray)
+                    Button {
+                        model.openPort(PortSelection(mode: .output, bay: update.bay))
+                    } label: {
+                        LabeledContent(update.name) {
+                            HStack(spacing: 6) {
+                                Text("Update available").foregroundStyle(.orange)
+                                if let version = update.firmwareVersion {
+                                    Text("current \(version)").foregroundStyle(.secondary)
+                                }
+                            }
                         }
+                        .contentShape(Rectangle())
                     }
-                    .onTapGesture { model.openPort(PortSelection(mode: .output, bay: update.bay)) }
+                    .buttonStyle(.plain)
                 }
             }
         }
     }
 
-    /// Plain rows rather than SwiftCrossUI's `Table`: buttons inside table cells never receive
-    /// clicks (the native table swallows them) and `Table` has no row selection, so rows couldn't
-    /// open the detail sheet. Whole-row tap gestures work.
-    func portsCard(_ state: MatrixState) -> some View {
+    private func portsSection(_ state: MatrixState) -> some View {
         let rows = portRows(state)
-        return FormSection("Ports") {
+        return Section {
             if rows.isEmpty {
-                Text("No ports discovered yet.")
+                Text("No ports discovered yet.").foregroundStyle(.secondary)
             } else {
-                VStack(alignment: .leading, spacing: 0) {
-                    portRow("Port", "Name", "Type", "Status", "Source", header: true)
-                    ForEach(rows) { row in
-                        portRow(row.port, row.name, row.type, nil, row.source, header: false, status: row.status, update: row.update)
-                            .onTapGesture { model.openPort(row.selection) }
+                portRowView("Port", "Name", "Type", nil, "Source", header: true)
+                ForEach(rows) { row in
+                    Button {
+                        model.openPort(row.selection)
+                    } label: {
+                        portRowView(row.port, row.name, row.type, row, row.source, header: false)
+                            .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
                 }
-                Text("Click a port to see details.").font(.caption)
             }
+        } header: {
+            Text("Ports")
+        } footer: {
+            if !rows.isEmpty { Text("Click a port to see details.") }
         }
     }
 
-    @ViewBuilder
-    func portRowCell(_ text: String, width: Int, header: Bool) -> some View {
-        if header {
-            Text(text).foregroundColor(Color.gray).frame(width: Double(width), alignment: .leading)
-        } else {
-            Text(text).frame(width: Double(width), alignment: .leading)
-        }
-    }
-
-    func portRow(
-        _ port: String, _ name: String, _ type: String, _ statusLabel: String?, _ source: String,
-        header: Bool, status: PortStatus? = nil, update: Bool = false
+    private func portRowView(
+        _ port: String, _ name: String, _ type: String, _ row: PortRow?, _ source: String, header: Bool
     ) -> some View {
-        HStack(spacing: 0) {
-            portRowCell(port, width: 80, header: header)
-            portRowCell(name, width: 130, header: header)
-            portRowCell(type, width: 90, header: header)
-            if let status {
-                HStack(spacing: 6) {
-                    StatusDot(status: status)
-                    Text(update ? "\(status.label) · update" : status.label)
+        HStack(spacing: 8) {
+            Text(port).frame(width: 80, alignment: .leading)
+            Text(name).frame(maxWidth: .infinity, alignment: .leading)
+            Text(type).frame(width: 90, alignment: .leading)
+            Group {
+                if let row {
+                    HStack(spacing: 6) {
+                        StatusDot(status: row.status)
+                        Text(row.update ? "\(row.status.label) · update" : row.status.label)
+                    }
+                } else {
+                    Text("Status")
                 }
-                .frame(width: 150, alignment: .leading)
-            } else {
-                portRowCell(statusLabel ?? "", width: 150, header: header)
             }
-            portRowCell(source, width: 120, header: header)
+            .frame(width: 170, alignment: .leading)
+            Text(source).frame(width: 110, alignment: .leading)
         }
-        .padding(.vertical, 5)
-        .padding(.horizontal, 8)
+        .lineLimit(1)
+        .foregroundStyle(header ? .secondary : .primary)
+        .font(header ? .callout : .body)
     }
 
     // MARK: Helpers
 
-    func portRows(_ state: MatrixState) -> [PortRow] {
+    private func portRows(_ state: MatrixState) -> [PortRow] {
         (state.inputs + state.outputs).map { port in
             let outputDetails = port.mode == .output ? state.outputDetails[port.bay] : nil
             let source = port.mode == .output
@@ -219,21 +211,21 @@ struct HardwarePage: View {
         }
     }
 
-    func backlightBinding(current: BacklightLevel) -> Binding<BacklightOption?> {
+    private func backlightBinding(current: BacklightLevel) -> Binding<BacklightOption> {
         Binding(
             get: { BacklightOption(model.backlightPending ?? current) },
-            set: { if let option = $0, option.level != (model.backlightPending ?? current) { model.setBacklight(option.level) } }
+            set: { if $0.level != (model.backlightPending ?? current) { model.setBacklight($0.level) } }
         )
     }
 
-    func statusLEDBinding(current: Bool) -> Binding<Bool> {
+    private func statusLEDBinding(current: Bool) -> Binding<Bool> {
         Binding(
             get: { model.statusLEDPending ?? current },
             set: { model.setStatusLED(on: $0) }
         )
     }
 
-    func formatMs(_ ms: Int) -> String {
+    private func formatMs(_ ms: Int) -> String {
         let seconds = Double(ms) / 1000
         if seconds < 60 { return "\(Int(seconds))s" }
         let minutes = seconds / 60

@@ -1,45 +1,8 @@
-import AppKit
 import PulseEightCore
 import SwiftUI
 
-/// The macOS Settings window. Built with SwiftUI rather than SwiftCrossUI so it gets the real
-/// system sidebar (Liquid Glass, native metrics), the window title from `navigationTitle`, and
-/// grouped form rows that match System Settings exactly. `AppModel` is an Apple `@Observable`,
-/// so SwiftUI observes it directly.
-@MainActor
-enum NativeSettings {
-    private static var window: NSWindow?
-
-    static func show(model: AppModel) {
-        model.resetDraft()
-        if let window {
-            window.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
-        }
-        let controller = NSHostingController(rootView: NativeSettingsView(model: model))
-        let window = NSWindow(contentViewController: controller)
-        window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
-        window.title = model.settingsPane.title
-        window.setContentSize(NSSize(width: 720, height: 520))
-        window.center()
-        window.setFrameAutosaveName("PulseEightControl.Settings")
-        window.isReleasedWhenClosed = false
-        window.tabbingMode = .disallowed
-        self.window = window
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-        // No text field should start out focused and selected.
-        DispatchQueue.main.async { window.makeFirstResponder(nil) }
-    }
-
-    /// The hosting controller doesn't forward `navigationTitle`, so the title follows the pane here.
-    static func setTitle(_ title: String) {
-        window?.title = title
-    }
-}
-
-struct NativeSettingsView: View {
+/// The Settings window (Cmd-,): a sidebar of panes over grouped forms, like System Settings.
+struct SettingsView: View {
     @Bindable var model: AppModel
 
     var body: some View {
@@ -49,7 +12,7 @@ struct NativeSettingsView: View {
                     Label(pane.title, systemImage: pane.symbol).tag(pane)
                 }
             }
-            .navigationSplitViewColumnWidth(220)
+            .navigationSplitViewColumnWidth(200)
             .toolbar(removing: .sidebarToggle)
         } detail: {
             Form {
@@ -62,14 +25,14 @@ struct NativeSettingsView: View {
             .formStyle(.grouped)
             .navigationTitle(model.settingsPane.title)
         }
-        .onChange(of: model.settingsPane) { NativeSettings.setTitle(model.settingsPane.title) }
-        .preferredColorScheme(colorScheme)
+        .frame(width: 720, height: 520)
+        .onAppear { model.resetDraft() }
     }
 
     // MARK: Panes
 
     @ViewBuilder
-    var matrixPane: some View {
+    private var matrixPane: some View {
         Section("Connection") {
             TextField("Host", text: $model.draft.host, prompt: Text("192.168.1.150"))
                 .multilineTextAlignment(.trailing)
@@ -86,7 +49,7 @@ struct NativeSettingsView: View {
     }
 
     @ViewBuilder
-    var adminPane: some View {
+    private var adminPane: some View {
         Section {
             SecureField(
                 "Password",
@@ -106,7 +69,7 @@ struct NativeSettingsView: View {
     }
 
     @ViewBuilder
-    var appearancePane: some View {
+    private var appearancePane: some View {
         Section("Theme") {
             Picker("Appearance", selection: appearanceBinding) {
                 ForEach(Appearance.allCases, id: \.self) { Text($0.description).tag($0) }
@@ -119,7 +82,7 @@ struct NativeSettingsView: View {
     }
 
     /// Message (if any) and the Apply button, as the last row of a group.
-    var applyRow: some View {
+    private var applyRow: some View {
         HStack {
             if let message = model.settingsMessage {
                 Text(message.text).foregroundStyle(message.isError ? Color.red : Color.secondary)
@@ -131,27 +94,19 @@ struct NativeSettingsView: View {
 
     // MARK: Bindings
 
-    var paneBinding: Binding<SettingsPane?> {
+    private var paneBinding: Binding<SettingsPane?> {
         Binding(get: { model.settingsPane }, set: { if let pane = $0 { model.settingsPane = pane } })
     }
 
-    var appearanceBinding: Binding<Appearance> {
+    private var appearanceBinding: Binding<Appearance> {
         Binding(get: { model.draft.appearance }, set: { model.setAppearance($0) })
     }
 
-    var highlightBinding: Binding<Bool> {
+    private var highlightBinding: Binding<Bool> {
         Binding(get: { model.settings.highlightGrid }, set: { model.setHighlightGrid($0) })
     }
 
-    var statusBarBinding: Binding<Bool> {
+    private var statusBarBinding: Binding<Bool> {
         Binding(get: { model.settings.showStatusBar }, set: { model.setShowStatusBar($0) })
-    }
-
-    var colorScheme: ColorScheme? {
-        switch model.settings.appearance {
-        case .system: nil
-        case .light: .light
-        case .dark: .dark
-        }
     }
 }

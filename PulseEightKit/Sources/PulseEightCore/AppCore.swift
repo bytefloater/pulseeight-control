@@ -313,7 +313,7 @@ public final class AppCore: @unchecked Sendable {
     }
 
     /// Quiet polls (nothing but timestamps changed) notify nobody: UIs can then re-render only on
-    /// real changes, which matters a lot for SwiftCrossUI where a changed value ripples up the tree.
+    /// real changes, which avoids needless view updates on every poll.
     private func apply(_ newState: MatrixState) {
         var key = newState
         key.status.lastPollTime = nil

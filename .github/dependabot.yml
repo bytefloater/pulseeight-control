@@ -1,0 +1,21 @@
+# Keeps the pinned GitHub Actions and the NuGet packages current. Pull requests only; nothing merges itself.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: nuget
+    directories:
+      - /PulseEightControl-windows/App
+      - /PulseEightControl-windows/Core
+      - /PulseEightControl-windows/Core.Tests
+    schedule:
+      interval: weekly
+    groups:
+      nuget:
+        patterns: ["*"]

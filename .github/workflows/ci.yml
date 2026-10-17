@@ -1,0 +1,206 @@
+name: CI
+
+on:
+  pull_request:
+    paths-ignore: ["legacy/**", "docs/**", "**/*.md"]
+  push:
+    branches: [main]
+    paths-ignore: ["legacy/**", "docs/**", "**/*.md"]
+  workflow_dispatch:
+  # The release workflow runs the same checks before it builds anything.
+  workflow_call:
+
+# A newer push to the same pull request replaces the run in progress; pushes to main always finish.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+# Third-party actions are pinned to a commit with the release in a comment; scripts/ci/check-pinned-actions.py
+# verifies each pin against GitHub, and Dependabot proposes updates.
+jobs:
+  # The shared Swift code, the fake matrix, the C interface from .NET, and the helper scripts.
+  swift-macos:
+    name: Swift (macOS)
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+          dotnet --version
+
+      - name: PulseEightKit tests
+        run: swift test --enable-code-coverage --package-path PulseEightKit
+
+      - name: PulseEightKit coverage
+        if: ${{ !cancelled() }}
+        run: |
+          python3 scripts/ci/coverage-summary.py "$(swift test --show-codecov-path --package-path PulseEightKit)" \
+            --title PulseEightKit --include PulseEightKit/Sources >> "$GITHUB_STEP_SUMMARY"
+
+      - name: PulseEightFakeServer tests
+        if: ${{ !cancelled() }}
+        run: swift test --enable-code-coverage --package-path PulseEightFakeServer
+
+      - name: PulseEightFakeServer coverage
+        if: ${{ !cancelled() }}
+        run: |
+          python3 scripts/ci/coverage-summary.py "$(swift test --show-codecov-path --package-path PulseEightFakeServer)" \
+            --title PulseEightFakeServer --include PulseEightFakeServer/Sources >> "$GITHUB_STEP_SUMMARY"
+
+      - name: p8ctl against p8fake (smoke test)
+        if: ${{ !cancelled() }}
+        run: scripts/ci/smoke-p8ctl.sh
+
+      - name: C interface from .NET (build the native library and the fake)
+        if: ${{ !cancelled() }}
+        run: |
+          swift build --package-path PulseEightKit --scratch-path out/kit --product pulseeight_core
+          swift build --package-path PulseEightFakeServer --scratch-path out/fake --product p8fake
+
+      - name: C interface from .NET (Core.Tests)
+        if: ${{ !cancelled() }}
+        env:
+          P8_CORE_LIBRARY: ${{ github.workspace }}/out/kit/debug/libpulseeight_core.dylib
+          P8_FAKE_SERVER: ${{ github.workspace }}/out/fake/debug/p8fake
+        run: dotnet test PulseEightControl-windows/Core.Tests
+
+      - name: Helper script tests
+        if: ${{ !cancelled() }}
+        run: python3 -m unittest discover -s scripts/ci -p 'test_*.py'
+
+  # The macOS app: its model tests, a release build the way Xcode makes it, and the packaged .app.
+  app-macos:
+    name: macOS app
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: App model tests
+        run: swift test --enable-code-coverage --package-path PulseEightControl-macos
+
+      - name: App coverage
+        if: ${{ !cancelled() }}
+        run: |
+          python3 scripts/ci/coverage-summary.py "$(swift test --show-codecov-path --package-path PulseEightControl-macos)" \
+            --title PulseEightControl-macos --include PulseEightControl-macos/Sources >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Release build with xcodebuild
+        if: ${{ !cancelled() }}
+        run: |
+          xcodebuild -project PulseEightControl-macos/PulseEightControl.xcodeproj \
+            -scheme PulseEightControl -configuration Release \
+            -destination 'generic/platform=macOS' -derivedDataPath out/xcode \
+            CODE_SIGNING_ALLOWED=NO build
+
+      - name: Package the .app
+        if: ${{ !cancelled() }}
+        run: |
+          PulseEightControl-macos/package.sh release
+          app=out/macos/PulseEightControl.app
+          test -x "$app/Contents/MacOS/PulseEightControl"
+          test -f "$app/Contents/Resources/Assets.car"
+          plutil -lint "$app/Contents/Info.plist"
+          codesign --verify --verbose=2 "$app"
+
+  # The Windows app, on both architectures: the Swift core, the C# tests that drive it through the C
+  # interface, the WinUI app, and a launch test of that app against the fake matrix.
+  windows:
+    name: Windows (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x64, runner: windows-latest, swift-arch: amd64 }
+          - { arch: arm64, runner: windows-11-arm, swift-arch: arm64 }
+    defaults:
+      run:
+        shell: powershell # Windows PowerShell 5.1, which the scripts are written for
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: compnerd/gha-setup-swift@9ff1ee4c44888c5817fc14d1b257ac8cabb4935f # v0.5.1
+        with:
+          source: swift.org
+          swift-version: swift-6.4.1-release
+          swift-build: 6.4.1-RELEASE
+          build_arch: ${{ matrix.swift-arch }}
+          cache: "true" # the installer is 1.6-2.1 GB
+
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Toolchain
+        run: |
+          swift --version
+          dotnet --version
+
+      # Builds the core DLL, stages it with the Swift runtime, builds the WinUI app, builds p8fake and
+      # runs Core.Tests end to end.
+      - name: Build and test (test.ps1)
+        run: .\PulseEightControl-windows\test.ps1
+
+      - name: Swift tests on Windows (PulseEightKit)
+        if: ${{ !cancelled() }}
+        run: swift test --package-path PulseEightKit
+
+      - name: Swift tests on Windows (PulseEightFakeServer)
+        if: ${{ !cancelled() }}
+        run: swift test --package-path PulseEightFakeServer
+
+      - name: Launch the app against the fake matrix (smoke.ps1)
+        if: ${{ !cancelled() }}
+        run: .\PulseEightControl-windows\smoke.ps1 -NoBuild
+
+      # The env context only holds workflow variables, so the crash log (under %LOCALAPPDATA%) is copied
+      # into the workspace first.
+      - name: Gather logs
+        if: ${{ failure() }}
+        run: |
+          New-Item -ItemType Directory -Force out\logs | Out-Null
+          $crash = Join-Path $env:LOCALAPPDATA 'PulseEightControl\crash.log'
+          if (Test-Path $crash) { Copy-Item $crash out\logs\crash.log }
+
+      - name: Keep logs when something failed
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-${{ matrix.arch }}-logs
+          path: out/logs/
+          if-no-files-found: ignore
+
+  workflows-lint:
+    name: Workflow lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # actionlint has no official action; this is its documented download script, from a pinned commit.
+      - name: actionlint
+        run: |
+          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/914e7df21a07ef503a81201c76d2b11c789d3fca/scripts/download-actionlint.bash) 1.7.12
+          ./actionlint -color
+
+      # A mistyped or stale commit only shows up when the workflow runs; this asks GitHub whether each pin
+      # really is the release its comment names.
+      - name: Check pinned actions
+        run: python3 scripts/ci/check-pinned-actions.py

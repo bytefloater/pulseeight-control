@@ -100,11 +100,14 @@ extension AppCore {
         return value
     }
 
-    /// Accepts a JSON string or number, since form values are strings but callers may send numbers.
+    /// Accepts a JSON string or number, since form values are strings but callers may send numbers. A missing
+    /// (or null) field takes the default; a field that is there but of another type is refused rather than
+    /// quietly replaced by the default, which would save settings the caller never asked for.
     private func text(_ object: [String: Any], _ key: String, default fallback: String) throws -> String {
-        if let value = object[key] as? String { return value }
-        if let value = object[key] as? NSNumber { return value.stringValue }
-        return fallback
+        guard let value = object[key], !(value is NSNull) else { return fallback }
+        if let text = value as? String { return text }
+        if let number = value as? NSNumber { return number.stringValue }
+        throw CoreError.invalid("\"\(key)\" must be text or a number")
     }
 
     private func int(_ object: [String: Any], _ key: String) throws -> Int {

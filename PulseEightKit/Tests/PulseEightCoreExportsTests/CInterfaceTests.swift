@@ -134,6 +134,25 @@ import PulseEightCoreExports
         #expect((reply["error"] as? String)?.isEmpty == false)
     }
 
+    /// A field that is present but of the wrong type is refused. It used to be swapped for the default and the
+    /// rest of the command carried on, saving settings (here a host) the caller never meant to save.
+    @Test(arguments: [#"[1,2]"#, #"{"a":1}"#])
+    func aWronglyTypedFieldIsRefusedAndNothingIsSaved(port: String) throws {
+        let (handle, scratch) = try makeHandle()
+        defer { p8_destroy(handle); _ = scratch }
+
+        let reply = try call(handle, #"{"cmd":"saveSettings","host":"10.1.2.3","port":\#(port)}"#)
+        #expect(reply["ok"] as? Bool == false)
+        #expect((reply["error"] as? String)?.contains("port") == true)
+        #expect(try snapshot(handle).settings.host == nil, "a refused command must not have saved anything")
+
+        // A missing port still takes its default, and numbers are accepted as well as text.
+        #expect(try call(handle, #"{"cmd":"saveSettings","host":"10.1.2.3"}"#)["ok"] as? Bool == true)
+        #expect(try snapshot(handle).settings.port == 80)
+        #expect(try call(handle, #"{"cmd":"saveSettings","host":"10.1.2.3","port":8080}"#)["ok"] as? Bool == true)
+        #expect(try snapshot(handle).settings.port == 8080)
+    }
+
     @Test func invalidUTF8InARequestIsAnErrorNotACrash() throws {
         let (handle, scratch) = try makeHandle()
         defer { p8_destroy(handle); _ = scratch }

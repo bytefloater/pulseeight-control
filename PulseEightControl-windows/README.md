@@ -56,6 +56,19 @@ The end-to-end tests start `p8fake` themselves (from `out\fake`, or the package'
 set `P8_FAKE_SERVER` to use another executable) and give the core a scratch settings folder, so your
 real settings aren't touched. Without `P8_CORE_LIBRARY` they are skipped.
 
+### Smoke test of the app itself
+
+`Core.Tests` exercise the core through the C interface. `smoke.ps1` runs the real WinUI app:
+
+```powershell
+.\PulseEightControl-windows\smoke.ps1                  # builds (debug), then watches the app for 15 s
+.\PulseEightControl-windows\smoke.ps1 -NoBuild -Seconds 30
+```
+
+It starts `p8fake` on a free port, launches the app against it with a throwaway settings folder, and
+fails if the app exits, never opens a window, stops responding, never polls the fake, won't close when
+asked, or writes `crash.log`. It needs an interactive desktop session (not SSH or a service).
+
 ## Notes
 
 * The WinUI project needs the Windows XAML tooling, so it can only be built on Windows; `Core` and

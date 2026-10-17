@@ -75,6 +75,57 @@ final class MockTransport: HTTPTransport, @unchecked Sendable {
     }
 }
 
+/// Holds every request to one host open until the test releases it, so a test can change the store's
+/// configuration while a poll is in flight. Requests to any other host are answered at once.
+final class GatedTransport: HTTPTransport, @unchecked Sendable {
+    private let inner: HTTPTransport
+    private let gatedHost: String
+    private let lock = NSLock()
+    private var released = false
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+    private var arrivals = 0
+
+    init(gatedHost: String, inner: HTTPTransport) {
+        self.gatedHost = gatedHost
+        self.inner = inner
+    }
+
+    func send(_ request: HTTPRequest) async throws -> HTTPResponse {
+        if request.url.host == gatedHost { await hold() }
+        return try await inner.send(request)
+    }
+
+    private func hold() async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            lock.lock()
+            arrivals += 1
+            if released {
+                lock.unlock()
+                continuation.resume()
+            } else {
+                waiting.append(continuation)
+                lock.unlock()
+            }
+        }
+    }
+
+    /// Requests to the gated host that have arrived so far.
+    var arrived: Int {
+        lock.lock(); defer { lock.unlock() }
+        return arrivals
+    }
+
+    /// Lets every held request, and all later ones, through.
+    func release() {
+        lock.lock()
+        released = true
+        let toResume = waiting
+        waiting = []
+        lock.unlock()
+        toResume.forEach { $0.resume() }
+    }
+}
+
 final class Clock: @unchecked Sendable {
     private let lock = NSLock()
     private var date: Date
@@ -105,6 +156,12 @@ final class StateRecorder: @unchecked Sendable {
     var latest: MatrixState? {
         lock.lock(); defer { lock.unlock() }
         return states.last
+    }
+
+    /// Every state published so far, oldest first.
+    var all: [MatrixState] {
+        lock.lock(); defer { lock.unlock() }
+        return states
     }
 
     func wait(timeout: TimeInterval = 5, until condition: (MatrixState) -> Bool) async -> MatrixState? {

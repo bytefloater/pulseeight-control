@@ -88,6 +88,12 @@ public actor MatrixStore {
     private var routingTask: Task<Void, Never>?
     private var detailsTask: Task<Void, Never>?
 
+    /// Bumped by every start, stop and reconfigure. A request that began under an earlier value must not
+    /// write its answer: actors run other work while a call is suspended on the network, so without
+    /// this a poll that finished after `stop()` or `reconfigure` repopulated the store with the old
+    /// host's data (and marked it connected).
+    private var epoch = 0
+
     public init(
         config: MatrixConfig,
         adminPassword: String? = nil,
@@ -145,6 +151,7 @@ public actor MatrixStore {
     }
 
     private func stopTasks() {
+        epoch += 1
         routingTask?.cancel()
         detailsTask?.cancel()
         routingTask = nil
@@ -307,23 +314,30 @@ public actor MatrixStore {
     /// Swallows errors into `lastError`; connection state is derived from `lastPollTime`.
     private func pollPorts() async {
         guard let client else { return }
+        let epoch = epoch
         do {
-            ports = try await client.ports()
+            let fetched = try await client.ports()
+            guard epoch == self.epoch else { return }
+            ports = fetched
             lastPollTime = now()
             lastError = nil
         } catch {
+            guard epoch == self.epoch else { return }
             lastError = error.localizedDescription
         }
     }
 
     func refreshSystem() async {
         guard let client else { return }
+        let epoch = epoch
         do {
             let details = try await client.systemDetails()
             let features = try await client.systemFeatures()
+            guard epoch == self.epoch else { return }
             system = SystemInfo(details: details, features: features)
             lastError = nil
         } catch {
+            guard epoch == self.epoch else { return }
             lastError = error.localizedDescription
         }
         publish()
@@ -331,7 +345,9 @@ public actor MatrixStore {
 
     func refreshDetails() async {
         guard let client else { return }
+        let epoch = epoch
         await pollPorts()
+        guard epoch == self.epoch else { return }
         guard lastError == nil else {
             publish()
             return
@@ -340,8 +356,14 @@ public actor MatrixStore {
         for port in ports {
             do {
                 switch port.mode {
-                case .input: inputDetails[port.bay] = try await client.inputDetails(bay: port.bay)
-                case .output: outputDetails[port.bay] = try await client.outputDetails(bay: port.bay)
+                case .input:
+                    let details = try await client.inputDetails(bay: port.bay)
+                    guard epoch == self.epoch else { return }
+                    inputDetails[port.bay] = details
+                case .output:
+                    let details = try await client.outputDetails(bay: port.bay)
+                    guard epoch == self.epoch else { return }
+                    outputDetails[port.bay] = details
                 }
             } catch {
                 // One flaky port shouldn't blank the others; keep its previous details.
@@ -351,6 +373,7 @@ public actor MatrixStore {
         // Front panel backlight can change at any time (physical button, the matrix's own admin
         // UI), so it rides this faster cadence rather than the 60s system refresh.
         if let details = system?.details, let features = try? await client.systemFeatures() {
+            guard epoch == self.epoch else { return }
             system = SystemInfo(details: details, features: features)
         }
         publish()

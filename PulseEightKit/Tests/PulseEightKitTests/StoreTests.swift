@@ -131,3 +131,114 @@ import Testing
         #expect(ids == [11, 4, 0, 3, 5, 2, 6, 7, 8, 101, 102])
     }
 }
+
+/// The store is an actor, but its polls `await` the network, and an actor can run other work while one is
+/// suspended. A poll that was in flight when the configuration changed used to come back afterwards and
+/// write the old host's answer into the new state.
+@Suite struct MatrixStoreLifecycleTests {
+    static let oldHost = "10.0.0.1"
+    static let newHost = "10.0.0.2"
+
+    /// `newHost` answers with ports named differently from `oldHost`, so a mix-up is visible.
+    func makeTransports() -> (gated: GatedTransport, inner: MockTransport) {
+        let inner = MockTransport { request in
+            let isNew = request.url.host == MatrixStoreLifecycleTests.newHost
+            let path = request.url.path
+            let body: String
+            switch path {
+            case "/Port/List": body = isNew ? Fixtures.portList.replacingOccurrences(of: "Sky", with: "NewHostSky") : Fixtures.portList
+            case "/System/Details": body = Fixtures.systemDetails
+            case "/system/features": body = Fixtures.systemFeatures
+            case let p where p.hasPrefix("/Port/Details/Input/"): body = Fixtures.inputDetails
+            case let p where p.hasPrefix("/Port/Details/Output/"): body = Fixtures.outputDetails
+            default: body = #"{"Result":true}"#
+            }
+            return MockTransport.reply(body)
+        }
+        return (GatedTransport(gatedHost: Self.oldHost, inner: inner), inner)
+    }
+
+    func waitUntil(timeout: TimeInterval = 5, _ condition: @Sendable () async -> Bool) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if await condition() { return true }
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+        return false
+    }
+
+    /// Gives a just-released request time to finish and be (wrongly) applied.
+    func letInFlightWorkFinish() async {
+        for _ in 0..<50 {
+            await Task.yield()
+            try? await Task.sleep(nanoseconds: 2_000_000)
+        }
+    }
+
+    @Test func aPollFinishingAfterReconfigureNeverReachesTheNewConfiguration() async throws {
+        let (gated, _) = makeTransports()
+        let recorder = StateRecorder()
+        let store = MatrixStore(
+            config: MatrixConfig(host: Self.oldHost), adminPassword: nil,
+            makeTransport: { _ in gated }, onChange: { recorder.record($0) }
+        )
+        await store.start()
+        #expect(await waitUntil { gated.arrived >= 1 }, "the first poll should be in flight")
+
+        await store.reconfigure(config: MatrixConfig(host: Self.newHost), adminPassword: nil)
+        let reachedNewHost = await recorder.wait { $0.status.host == Self.newHost && $0.inputs.first?.name == "NewHostSky" }
+        #expect(reachedNewHost != nil, "the new host's ports should load")
+
+        let publishedBeforeRelease = recorder.all.count
+        gated.release() // the old host finally answers
+        await letInFlightWorkFinish()
+
+        // Whatever the store ends up showing, nothing the *old* host said may be published afterwards: a UI
+        // would flash the wrong matrix's ports (and a stale "connected").
+        let after = recorder.all.dropFirst(publishedBeforeRelease)
+        #expect(!after.contains { $0.inputs.first?.name == "Sky" }, "old host's ports were published after the switch")
+        let state = await store.state
+        #expect(state.inputs.first?.name == "NewHostSky")
+        #expect(state.status.host == Self.newHost)
+        await store.stop()
+    }
+
+    @Test func aStoppedStoreStaysEmptyEvenIfAPollWasInFlight() async throws {
+        let (gated, _) = makeTransports()
+        let store = MatrixStore(
+            config: MatrixConfig(host: Self.oldHost), adminPassword: nil,
+            makeTransport: { _ in gated }, onChange: { _ in }
+        )
+        await store.start()
+        #expect(await waitUntil { gated.arrived >= 1 })
+
+        await store.stop()
+        gated.release()
+        await letInFlightWorkFinish()
+
+        let state = await store.state
+        #expect(state.ports.isEmpty, "a poll that finished after stop() repopulated the store")
+        #expect(state.system == nil)
+        #expect(state.inputDetails.isEmpty && state.outputDetails.isEmpty)
+        #expect(state.status.lastPollTime == nil)
+        #expect(!state.status.connected)
+    }
+
+    @Test func rapidStartStopCyclesLeaveACleanStore() async throws {
+        let (gated, _) = makeTransports()
+        gated.release() // nothing held
+        let store = MatrixStore(
+            config: MatrixConfig(host: Self.oldHost), adminPassword: nil,
+            makeTransport: { _ in gated }, onChange: { _ in }
+        )
+        for _ in 0..<40 {
+            await store.start()
+            await store.stop()
+        }
+        await letInFlightWorkFinish()
+
+        let state = await store.state
+        #expect(state.ports.isEmpty)
+        #expect(!state.status.connected)
+    }
+}

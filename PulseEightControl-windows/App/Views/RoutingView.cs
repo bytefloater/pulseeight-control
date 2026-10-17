@@ -166,7 +166,7 @@ internal sealed class RoutingView : UserControl
 
     private static void Describe(UIElement element, PortSnapshot port)
     {
-        var text = $"{port.Name} (port {port.Number}) · {port.StatusLabel}";
+        var text = Loc.F("routing.portTooltip", port.Name, port.Number, port.StatusLabel);
         ToolTipService.SetToolTip(element, text);
         AutomationProperties.SetName(element, text);
     }
@@ -203,9 +203,9 @@ internal sealed class RoutingView : UserControl
             };
         }
 
-        var tip = $"{input.Name} → {output.Name}";
+        var tip = Loc.F("routing.route", input.Name, output.Name);
         ToolTipService.SetToolTip(cell, tip);
-        AutomationProperties.SetName(cell, pending ? $"{tip}, routing" : routed ? $"{tip}, routed" : tip);
+        AutomationProperties.SetName(cell, pending ? Loc.F("routing.routing", tip) : routed ? Loc.F("routing.routed", tip) : tip);
         cell.Tapped += (_, _) => Route(input, output);
         cell.PointerEntered += (_, _) => SetHover(row, column);
         cell.PointerExited += (_, _) => SetHover(-1, -1);
@@ -259,7 +259,7 @@ internal sealed class RoutingView : UserControl
             _pending.Remove(output.Bay);
             _signature = "";
             if (_snapshot != null) Apply(_snapshot);
-            await Dialogs.ErrorAsync($"Couldn't route {output.Name}", result.Error);
+            await Dialogs.ErrorAsync(Loc.F("routing.error", output.Name), result.Error);
             return;
         }
 

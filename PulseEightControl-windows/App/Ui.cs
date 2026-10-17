@@ -166,8 +166,8 @@ internal static class Dialogs
     public static Task ErrorAsync(string title, string? message) => ShowAsync(new ContentDialog
     {
         Title = title,
-        Content = Ui.Text(message ?? "Something went wrong.", wrap: true),
-        CloseButtonText = "OK",
+        Content = Ui.Text(message ?? Loc.T("common.unknownError"), wrap: true),
+        CloseButtonText = Loc.T("common.ok"),
         DefaultButton = ContentDialogButton.Close,
     });
 }

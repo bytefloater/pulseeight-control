@@ -9,8 +9,8 @@ public sealed class SnapshotTests
     public void ParsesTheCoreSnapshotShape()
     {
         const string json = """
-        {"schema":1,"phase":"connected","summary":"Connected to 10.0.0.2","hostLabel":"10.0.0.2","adminConfigured":true,
-         "settings":{"appearance":"system","highlightGrid":true,"showStatusBar":true,"host":"10.0.0.2","port":80,"timeout":10,"pollInterval":5,"detailPollInterval":20},
+        {"schema":1,"phase":"connected","summary":"Connected to 10.0.0.2","hostLabel":"10.0.0.2","adminConfigured":true,"language":"en","languages":[{"code":"en","name":"English"}],
+         "settings":{"appearance":"system","highlightGrid":true,"showStatusBar":true,"language":"system","host":"10.0.0.2","port":80,"timeout":10,"pollInterval":5,"detailPollInterval":20},
          "inputs":[{"mode":"Input","bay":0,"number":1,"name":"Sky","type":"HDMI IN","status":0,"statusLabel":"OK","updateAvailable":false,"edidProfile":3,"details":[{"label":"Signal","value":"HDMI"}]}],
          "outputs":[{"mode":"Output","bay":0,"number":1,"name":"Lounge","type":"HDBT OUT","status":3,"statusLabel":"No signal","receiveFrom":0,"sourceName":"Sky","updateAvailable":true,"details":[]}],
          "systemRows":[{"label":"Model","value":"NeoMatrix"}],"featureRows":[],
@@ -29,6 +29,9 @@ public sealed class SnapshotTests
         Assert.Equal("high", snapshot.FrontPanel?.Backlight);
         Assert.Equal("Model", snapshot.SystemRows[0].Label);
         Assert.Single(snapshot.Updates);
+        Assert.Equal("en", snapshot.Language);
+        Assert.Equal("English", snapshot.Languages[0].Name);
+        Assert.Equal("system", snapshot.Settings.Language);
     }
 
     [Fact]

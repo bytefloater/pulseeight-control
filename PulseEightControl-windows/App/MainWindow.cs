@@ -14,7 +14,7 @@ namespace PulseEightControl;
 public sealed class MainWindow : Window
 {
     private readonly CoreClient _core = new();
-    private readonly TitleBar _titleBar = new() { Title = "PulseEight Control" };
+    private readonly TitleBar _titleBar = new();
     private readonly NavigationView _navigation = new();
     private readonly Border _content = new();
     private readonly StatusBarView _statusBar = new();
@@ -22,8 +22,8 @@ public sealed class MainWindow : Window
     private readonly NavigationViewItem _hardwareItem;
     private readonly RoutingView _routing;
     private readonly HardwareView _hardware;
-    private readonly SettingsView _settings;
-    private readonly ConnectionView _connection;
+    private SettingsView _settings;
+    private ConnectionView _connection;
     private readonly Grid _root = new();
 
     private Snapshot _snapshot = null!;
@@ -33,7 +33,9 @@ public sealed class MainWindow : Window
     public MainWindow()
     {
         _snapshot = _core.Snapshot;
-        Title = "PulseEight Control";
+        Loc.Load(_core.GetStrings(), _snapshot.Language);
+        Title = Loc.T("app.title");
+        _titleBar.Title = Loc.T("app.title");
         // Modern WinUI 3 title bar: the app draws it (so Mica runs right to the top edge) and the
         // system keeps the caption buttons.
         ExtendsContentIntoTitleBar = true;
@@ -46,8 +48,8 @@ public sealed class MainWindow : Window
         _settings = new SettingsView(_core);
         _connection = new ConnectionView(_core, SelectSettings);
 
-        _routingItem = new NavigationViewItem { Content = "Routing", Tag = "routing", Icon = new FontIcon { Glyph = "" } };
-        _hardwareItem = new NavigationViewItem { Content = "Hardware", Tag = "hardware", Icon = new FontIcon { Glyph = "" } };
+        _routingItem = new NavigationViewItem { Content = Loc.T("nav.routing"), Tag = "routing", Icon = new FontIcon { Glyph = "" } };
+        _hardwareItem = new NavigationViewItem { Content = Loc.T("nav.hardware"), Tag = "hardware", Icon = new FontIcon { Glyph = "" } };
 
         _navigation.PaneDisplayMode = NavigationViewPaneDisplayMode.Left;
         _navigation.IsBackButtonVisible = NavigationViewBackButtonVisible.Collapsed;
@@ -87,6 +89,7 @@ public sealed class MainWindow : Window
         _navigation.Loaded += (_, _) =>
         {
             _navigationReady = true;
+            ApplyNavigationText(); // the built-in Settings item exists only now
             Refresh();
         };
         _root.ActualThemeChanged += (_, _) =>
@@ -105,6 +108,28 @@ public sealed class MainWindow : Window
         _core.Changed += snapshot => DispatcherQueue.TryEnqueue(() => OnChanged(snapshot));
         ApplyTheme(_snapshot);
         Refresh();
+    }
+
+    /// <summary>Loads the text for the language now in force and rebuilds what holds text from it.
+    /// Pages that are rebuilt from every snapshot (routing, hardware, status bar) pick it up on their
+    /// own; the settings and connection pages are built once, so they are replaced.</summary>
+    private void ApplyLanguage(Snapshot snapshot)
+    {
+        Loc.Load(_core.GetStrings(), snapshot.Language);
+        Title = Loc.T("app.title");
+        _titleBar.Title = Loc.T("app.title");
+        ApplyNavigationText();
+        _settings = new SettingsView(_core);
+        _connection = new ConnectionView(_core, SelectSettings);
+        _routing.Invalidate();
+        _hardware.Invalidate();
+    }
+
+    private void ApplyNavigationText()
+    {
+        _routingItem.Content = Loc.T("nav.routing");
+        _hardwareItem.Content = Loc.T("nav.hardware");
+        if (_navigation.SettingsItem is NavigationViewItem settings) settings.Content = Loc.T("nav.settings");
     }
 
     /// <summary>The caption buttons follow the system theme unless told otherwise; make them follow
@@ -139,6 +164,7 @@ public sealed class MainWindow : Window
     private void OnChanged(Snapshot snapshot)
     {
         _snapshot = snapshot;
+        if (snapshot.Language != Loc.Current) ApplyLanguage(snapshot);
         ApplyTheme(snapshot);
         Refresh();
     }

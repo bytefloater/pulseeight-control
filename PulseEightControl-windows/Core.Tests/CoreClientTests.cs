@@ -82,7 +82,14 @@ public sealed class FakeMatrixFixture : IDisposable
     }
 }
 
-public sealed class CoreClientTests : IClassFixture<FakeMatrixFixture>
+/// <summary>One fake matrix and one scratch config for every test that uses the core: they share a
+/// port and the native library reads its settings from an environment variable, so these tests
+/// must not run in parallel.</summary>
+[CollectionDefinition("Core")]
+public sealed class CoreCollection : ICollectionFixture<FakeMatrixFixture>;
+
+[Collection("Core")]
+public sealed class CoreClientTests
 {
     private static async Task<Snapshot> WaitFor(CoreClient core, Func<Snapshot, bool> condition, string what)
     {

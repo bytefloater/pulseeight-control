@@ -43,9 +43,9 @@ internal sealed class StatusBarView : UserControl
         {
             if (!string.IsNullOrEmpty(snapshot.Model))
                 AddItem(snapshot.Firmware is { Length: > 0 } ? $"{snapshot.Model} · {snapshot.Firmware}" : snapshot.Model);
-            AddItem(snapshot.AdminConfigured ? "Admin enabled" : "Read-only");
+            AddItem(Loc.T(snapshot.AdminConfigured ? "statusbar.adminEnabled" : "statusbar.readOnly"));
             if (snapshot.Updates.Count > 0)
-                AddItem(snapshot.Updates.Count == 1 ? "1 firmware update" : $"{snapshot.Updates.Count} firmware updates");
+                AddItem(Loc.Count(snapshot.Updates.Count, "statusbar.firmwareUpdate.one", "statusbar.firmwareUpdate.other"));
         }
     }
 

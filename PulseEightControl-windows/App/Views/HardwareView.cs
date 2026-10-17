@@ -48,26 +48,26 @@ internal sealed class HardwareView : UserControl
     private UIElement Build(Snapshot snapshot)
     {
         var page = new StackPanel { Spacing = 4 };
-        page.Children.Add(Ui.Header("Hardware"));
+        page.Children.Add(Ui.Header(Loc.T("hardware.title")));
 
         page.Children.Add(Ui.Columns(
-            Ui.Section("System", Card(snapshot.SystemRows)),
-            Ui.Section("Features", Card(snapshot.FeatureRows))));
+            Ui.Section(Loc.T("hardware.system"), Card(snapshot.SystemRows)),
+            Ui.Section(Loc.T("hardware.features"), Card(snapshot.FeatureRows))));
 
         var panel = snapshot.AdminConfigured ? snapshot.FrontPanel : null;
-        var updates = Ui.Section("Firmware updates", Updates(snapshot));
-        page.Children.Add(panel is null ? updates : Ui.Columns(Ui.Section("Front panel", FrontPanel(panel)), updates));
+        var updates = Ui.Section(Loc.T("hardware.firmwareUpdates"), Updates(snapshot));
+        page.Children.Add(panel is null ? updates : Ui.Columns(Ui.Section(Loc.T("hardware.frontPanel"), FrontPanel(panel)), updates));
 
         page.Children.Add(Ui.Columns(
-            Ui.Section("Inputs", Ports(snapshot, snapshot.Inputs)),
-            Ui.Section("Outputs", Ports(snapshot, snapshot.Outputs))));
+            Ui.Section(Loc.T("hardware.inputs"), Ports(snapshot, snapshot.Inputs)),
+            Ui.Section(Loc.T("hardware.outputs"), Ports(snapshot, snapshot.Outputs))));
 
         return Ui.Column(page); // _host is the one ScrollViewer
     }
 
     private static UIElement Card(IReadOnlyList<LabeledValue> rows) =>
         rows.Count == 0
-            ? Ui.Card(Ui.Row("Nothing to show yet", ""))
+            ? Ui.Card(Ui.Row(Loc.T("hardware.nothingYet"), ""))
             : Ui.Card(rows.Select(r => (UIElement)Ui.Row(r.Label, r.Value)).ToArray());
 
     private UIElement FrontPanel(FrontPanelSnapshot panel)
@@ -77,7 +77,7 @@ internal sealed class HardwareView : UserControl
         if (panel.Backlight != null)
         {
             var picker = new ComboBox { MinWidth = 120 };
-            foreach (var name in new[] { "Off", "Low", "High" }) picker.Items.Add(name);
+            foreach (var key in new[] { "hardware.backlight.off", "hardware.backlight.low", "hardware.backlight.high" }) picker.Items.Add(Loc.T(key));
             picker.SelectedIndex = Array.IndexOf(Backlight, panel.Backlight);
             picker.SelectionChanged += async (_, _) =>
             {
@@ -90,10 +90,10 @@ internal sealed class HardwareView : UserControl
                 if (!result.Ok)
                 {
                     picker.SelectedIndex = Array.IndexOf(Backlight, panel.Backlight);
-                    await Dialogs.ErrorAsync("Couldn't change the backlight", result.Error);
+                    await Dialogs.ErrorAsync(Loc.T("hardware.backlightError"), result.Error);
                 }
             };
-            rows.Add(Ui.Row("Backlight", picker));
+            rows.Add(Ui.Row(Loc.T("hardware.backlight"), picker));
         }
 
         if (panel.StatusLed is { } led)
@@ -108,10 +108,10 @@ internal sealed class HardwareView : UserControl
                 if (!result.Ok)
                 {
                     toggle.IsOn = led;
-                    await Dialogs.ErrorAsync("Couldn't change the status light", result.Error);
+                    await Dialogs.ErrorAsync(Loc.T("hardware.statusLightError"), result.Error);
                 }
             };
-            rows.Add(Ui.Row("Status light", toggle));
+            rows.Add(Ui.Row(Loc.T("hardware.statusLight"), toggle));
         }
 
         return Ui.Card(rows.ToArray());
@@ -119,15 +119,15 @@ internal sealed class HardwareView : UserControl
 
     private static UIElement Updates(Snapshot snapshot)
     {
-        if (snapshot.Updates.Count == 0) return Ui.Card(Ui.Row("All outputs are up to date", ""));
+        if (snapshot.Updates.Count == 0) return Ui.Card(Ui.Row(Loc.T("hardware.allUpToDate"), ""));
         return Ui.Card(snapshot.Updates
-            .Select(u => (UIElement)Ui.Row(u.Name, u.FirmwareVersion is { Length: > 0 } v ? $"Version {v} available" : "Update available"))
+            .Select(u => (UIElement)Ui.Row(u.Name, u.FirmwareVersion is { Length: > 0 } v ? Loc.F("hardware.versionAvailable", v) : Loc.T("hardware.updateAvailable")))
             .ToArray());
     }
 
     private UIElement Ports(Snapshot snapshot, IReadOnlyList<PortSnapshot> ports)
     {
-        if (ports.Count == 0) return Ui.Card(Ui.Row("No ports", ""));
+        if (ports.Count == 0) return Ui.Card(Ui.Row(Loc.T("hardware.noPorts"), ""));
 
         var rows = ports.Select(port =>
         {
@@ -144,7 +144,7 @@ internal sealed class HardwareView : UserControl
             line.Children.Add(name);
 
             var detail = Ui.Text(
-                port.UpdateAvailable ? $"{port.StatusLabel} · update available" : port.StatusLabel,
+                port.UpdateAvailable ? Loc.F("hardware.portUpdateAvailable", port.StatusLabel) : port.StatusLabel,
                 "CaptionTextBlockStyle", secondary: true);
             detail.VerticalAlignment = VerticalAlignment.Center;
             Grid.SetColumn(detail, 2);

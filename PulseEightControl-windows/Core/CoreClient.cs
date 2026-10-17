@@ -101,6 +101,25 @@ public sealed class CoreClient : IDisposable
     public Task<CommandResult> SetAppearanceAsync(string value) =>
         CallAsync("setAppearance", new Dictionary<string, object?> { ["value"] = value });
 
+    /// <summary>A language code from <see cref="Snapshot.Languages"/>, or "system".</summary>
+    public Task<CommandResult> SetLanguageAsync(string code) =>
+        CallAsync("setLanguage", new Dictionary<string, object?> { ["value"] = code });
+
+    /// <summary>All user-visible text for the language in force, by dotted key. A local lookup (no
+    /// network), so it is quick enough to call on the UI thread, e.g. while building a page.</summary>
+    public IReadOnlyDictionary<string, string> GetStrings()
+    {
+        _lifetime.EnterReadLock();
+        try
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            var result = CommandResult.Parse(NativeMethods.TakeString(NativeMethods.p8_call(_handle, """{"cmd":"strings"}""")));
+            if (!result.Ok || result.Value == null) throw new InvalidOperationException(result.Error ?? "The core returned no strings.");
+            return JsonSerializer.Deserialize<Dictionary<string, string>>(result.Value) ?? new Dictionary<string, string>();
+        }
+        finally { _lifetime.ExitReadLock(); }
+    }
+
     public Task<CommandResult> SetHighlightGridAsync(bool on) =>
         CallAsync("setHighlightGrid", new Dictionary<string, object?> { ["on"] = on });
 

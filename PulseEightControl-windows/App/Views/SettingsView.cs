@@ -17,10 +17,12 @@ internal sealed class SettingsView : UserControl
     private readonly TextBox _poll = new() { Width = 120 };
     private readonly TextBox _detailPoll = new() { Width = 120 };
     private readonly PasswordBox _password = new() { Width = 260 };
-    private readonly Button _removePassword = new() { Content = "Remove saved password" };
-    private readonly Button _save = new() { Content = "Save and connect" };
+    private readonly Button _removePassword = new() { Content = Loc.T("settings.removePassword") };
+    private readonly Button _save = new() { Content = Loc.T("settings.save") };
     private readonly TextBlock _message = Ui.Text("", "CaptionTextBlockStyle", wrap: true);
     private readonly ComboBox _appearance = new() { MinWidth = 140 };
+    private readonly ComboBox _language = new() { MinWidth = 140 };
+    private readonly List<string> _languageCodes = []; // parallel to _language.Items: "system", then each language
     private readonly ToggleSwitch _highlight = new() { OnContent = "", OffContent = "", MinWidth = 0 };
     private readonly ToggleSwitch _statusBar = new() { OnContent = "", OffContent = "", MinWidth = 0 };
     private readonly TextBlock _passwordNote = Ui.Text("", "CaptionTextBlockStyle", secondary: true, wrap: true);
@@ -31,8 +33,8 @@ internal sealed class SettingsView : UserControl
     public SettingsView(CoreClient core)
     {
         _core = core;
-        foreach (var name in new[] { "Use system setting", "Light", "Dark" }) _appearance.Items.Add(name);
-        _password.PlaceholderText = "Leave blank to keep";
+        foreach (var key in new[] { "theme.system", "theme.light", "theme.dark" }) _appearance.Items.Add(Loc.T(key));
+        _password.PlaceholderText = Loc.T("settings.password.placeholder");
 
         _save.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
         _save.Click += async (_, _) => await SaveAsync();
@@ -41,6 +43,11 @@ internal sealed class SettingsView : UserControl
         {
             if (_loading || _appearance.SelectedIndex < 0) return;
             await _core.SetAppearanceAsync(Appearances[_appearance.SelectedIndex]);
+        };
+        _language.SelectionChanged += async (_, _) =>
+        {
+            if (_loading || _language.SelectedIndex < 0 || _language.SelectedIndex >= _languageCodes.Count) return;
+            await _core.SetLanguageAsync(_languageCodes[_language.SelectedIndex]);
         };
         _highlight.Toggled += async (_, _) => { if (!_loading) await _core.SetHighlightGridAsync(_highlight.IsOn); };
         _statusBar.Toggled += async (_, _) => { if (!_loading) await _core.SetShowStatusBarAsync(_statusBar.IsOn); };
@@ -52,20 +59,20 @@ internal sealed class SettingsView : UserControl
     private UIElement Build()
     {
         var page = new StackPanel { Spacing = 4 };
-        page.Children.Add(Ui.Header("Settings"));
+        page.Children.Add(Ui.Header(Loc.T("settings.title")));
 
         page.Children.Add(Ui.Columns(
-            Ui.Section("Matrix", Ui.Card(
-                Ui.Row("Address", _host, "Host name or IP address"),
-                Ui.Row("Port", _port))),
-            Ui.Section("Polling", Ui.Card(
-                Ui.Row("Timeout", _timeout, "Seconds to wait for a reply"),
-                Ui.Row("Refresh interval", _poll, "Seconds between status checks"),
-                Ui.Row("Port detail interval", _detailPoll, "Seconds between port detail checks")))));
+            Ui.Section(Loc.T("settings.matrix"), Ui.Card(
+                Ui.Row(Loc.T("settings.address"), _host, Loc.T("settings.address.caption")),
+                Ui.Row(Loc.T("settings.port"), _port))),
+            Ui.Section(Loc.T("settings.polling"), Ui.Card(
+                Ui.Row(Loc.T("settings.timeout"), _timeout, Loc.T("settings.timeout.caption")),
+                Ui.Row(Loc.T("settings.refresh"), _poll, Loc.T("settings.refresh.caption")),
+                Ui.Row(Loc.T("settings.detailInterval"), _detailPoll, Loc.T("settings.detailInterval.caption"))))));
 
-        page.Children.Add(Ui.Section("Administrator", Ui.Card(
-            Ui.Row("Password", _password, "Needed to rename ports, change EDID profiles and use the front panel controls"),
-            Ui.Row("Saved password", _removePassword, null))));
+        page.Children.Add(Ui.Section(Loc.T("settings.administrator"), Ui.Card(
+            Ui.Row(Loc.T("settings.password"), _password, Loc.T("settings.password.caption")),
+            Ui.Row(Loc.T("settings.savedPassword"), _removePassword, null))));
         page.Children.Add(_passwordNote);
 
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Margin = new Thickness(0, 8, 0, 0) };
@@ -73,10 +80,11 @@ internal sealed class SettingsView : UserControl
         actions.Children.Add(_message);
         page.Children.Add(actions);
 
-        page.Children.Add(Ui.Section("Appearance", Ui.Card(
-            Ui.Row("Theme", _appearance),
-            Ui.Row("Highlight row and column", _highlight, "Light up the grid under the pointer"),
-            Ui.Row("Show status bar", _statusBar))));
+        page.Children.Add(Ui.Section(Loc.T("settings.appearance"), Ui.Card(
+            Ui.Row(Loc.T("settings.theme"), _appearance),
+            Ui.Row(Loc.T("settings.language"), _language, Loc.T("settings.language.caption")),
+            Ui.Row(Loc.T("settings.highlight"), _highlight, Loc.T("settings.highlight.caption")),
+            Ui.Row(Loc.T("settings.statusBar"), _statusBar))));
 
         return page;
     }
@@ -88,12 +96,23 @@ internal sealed class SettingsView : UserControl
         {
             var settings = snapshot.Settings;
             _appearance.SelectedIndex = Math.Max(0, Array.IndexOf(Appearances, settings.Appearance));
+            if (_languageCodes.Count == 0)
+            {
+                _languageCodes.Add("system");
+                _language.Items.Add(Loc.T("language.system"));
+                foreach (var language in snapshot.Languages)
+                {
+                    _languageCodes.Add(language.Code);
+                    _language.Items.Add(language.Name);
+                }
+            }
+            _language.SelectedIndex = Math.Max(0, _languageCodes.IndexOf(settings.Language));
             _highlight.IsOn = settings.HighlightGrid;
             _statusBar.IsOn = settings.ShowStatusBar;
             _removePassword.IsEnabled = snapshot.AdminConfigured;
             _passwordNote.Text = snapshot.AdminConfigured
-                ? "An admin password is saved on this PC."
-                : "No admin password is saved. The app is read-only.";
+                ? Loc.T("settings.passwordSaved")
+                : Loc.T("settings.passwordNone");
 
             // Don't overwrite what's being typed; fill the form once, and again after saving.
             if (!_loadedOnce)
@@ -125,12 +144,12 @@ internal sealed class SettingsView : UserControl
         if (result.Ok)
         {
             _password.Password = "";
-            _message.Text = "Saved";
+            _message.Text = Loc.T("settings.saved");
             _message.Foreground = Palette.Status(0);
         }
         else
         {
-            _message.Text = result.Error ?? "Couldn't save the settings";
+            _message.Text = result.Error ?? Loc.T("settings.saveError");
             _message.Foreground = Palette.Status(1);
         }
     }
@@ -139,10 +158,10 @@ internal sealed class SettingsView : UserControl
     {
         var confirm = new ContentDialog
         {
-            Title = "Remove the saved password?",
-            Content = Ui.Text("The app will become read-only until you enter the password again.", wrap: true),
-            PrimaryButtonText = "Remove",
-            CloseButtonText = "Cancel",
+            Title = Loc.T("settings.removeDialog.title"),
+            Content = Ui.Text(Loc.T("settings.removeDialog.body"), wrap: true),
+            PrimaryButtonText = Loc.T("common.remove"),
+            CloseButtonText = Loc.T("common.cancel"),
             DefaultButton = ContentDialogButton.Close,
         };
         var removed = false;
@@ -151,6 +170,6 @@ internal sealed class SettingsView : UserControl
         if (!removed) return;
 
         var result = await _core.RemoveAdminPasswordAsync();
-        if (!result.Ok) await Dialogs.ErrorAsync("Couldn't remove the password", result.Error);
+        if (!result.Ok) await Dialogs.ErrorAsync(Loc.T("settings.removeError"), result.Error);
     }
 }

@@ -28,7 +28,7 @@ Quiet polls (only timestamps changed) do not fire the observer.
 
 ## Commands (`p8_call`)
 
-Request `{"cmd": "...", ...}`; response `{"ok":true}` (plus `"value"` for `validatePortName`) or
+Request `{"cmd": "...", ...}`; response `{"ok":true}` (plus `"value"` for `validatePortName` and `strings`) or
 `{"ok":false,"error":"message ready to show"}`.
 
 | `cmd` | Fields |
@@ -43,6 +43,8 @@ Request `{"cmd": "...", ...}`; response `{"ok":true}` (plus `"value"` for `valid
 | `saveSettings` | `host`, `port`, `timeout`, `pollInterval`, `detailPollInterval` (strings or numbers), optional `adminPassword` (empty keeps the saved one) |
 | `removeAdminPassword` | |
 | `setAppearance` | `value`: `system`, `light`, `dark` |
+| `setLanguage` | `value`: a code from the snapshot's `languages`, or `system` |
+| `strings` | returns the whole text table for the language in force, a JSON object in `value` (see [localisation](localisation.md)) |
 | `setHighlightGrid`, `setShowStatusBar` | `on`: bool |
 | `validatePortName` | `name`; returns the trimmed name in `value` |
 
@@ -55,7 +57,9 @@ if no admin password is saved.
 
 ```
 schema, phase, phaseDetail?, summary, hostLabel, adminConfigured,
-settings { appearance, highlightGrid, showStatusBar, host?, port, timeout, pollInterval, detailPollInterval },
+language ("en": the language in force), languages [ {code, name} ] (name is in that language),
+settings { appearance, highlightGrid, showStatusBar, language ("system" or a code), host?, port, timeout,
+           pollInterval, detailPollInterval },
 inputs[], outputs[]  -> port {
     mode, bay, number, name, type,
     status (0 ok, 1 module fault, 2 warning, 3 no signal, 4 not present), statusLabel,
@@ -71,13 +75,14 @@ edidProfiles [ {id, name} ]
 ```
 
 `phase` is `notConfigured`, `connecting`, `connected` or `disconnected` (`phaseDetail` says why).
-`summary` is ready-made text such as `Connected to 192.168.1.150`.
+`summary` is ready-made text such as `Connected to 192.168.1.150`. Every piece of text in the snapshot
+(`summary`, `statusLabel`, the `label`/`value` rows, error messages) is already in the language in force.
 
 ## Building the library
 
-macOS: `swift build --package-path swift` produces `libpulseeight_core.dylib`.
+macOS: `swift build --package-path PulseEightKit` produces `libpulseeight_core.dylib`.
 
-Windows: `swift build --package-path swift` produces `pulseeight_core.dll`. It needs the Swift
+Windows: `swift build --package-path PulseEightKit` produces `pulseeight_core.dll`. It needs the Swift
 runtime DLLs (`swiftCore.dll`, `Foundation.dll`, ...) beside it at run time; the packaging step
 copies them next to the app.
 

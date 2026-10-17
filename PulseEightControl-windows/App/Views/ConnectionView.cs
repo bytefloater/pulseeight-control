@@ -29,17 +29,17 @@ internal sealed class ConnectionView : UserControl
         {
             case "notConfigured":
                 panel.Children.Add(new FontIcon { Glyph = "", FontSize = 40 });
-                title = "Add your matrix";
-                detail = "Enter the address of your Pulse-Eight matrix in Settings to get started.";
+                title = Loc.T("connection.addMatrix.title");
+                detail = Loc.T("connection.addMatrix.detail");
                 break;
             case "connecting":
                 panel.Children.Add(new ProgressRing { IsActive = true, Width = 40, Height = 40 });
-                title = "Connecting…";
+                title = Loc.T("connection.connecting.title");
                 detail = snapshot.Summary;
                 break;
             default:
                 panel.Children.Add(new FontIcon { Glyph = "", FontSize = 40 });
-                title = "Can't reach the matrix";
+                title = Loc.T("connection.unreachable.title");
                 detail = snapshot.PhaseDetail ?? snapshot.Summary;
                 break;
         }
@@ -54,11 +54,11 @@ internal sealed class ConnectionView : UserControl
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Center };
         if (snapshot.Phase != "notConfigured")
         {
-            var retry = new Button { Content = "Try again" };
+            var retry = new Button { Content = Loc.T("connection.tryAgain") };
             retry.Click += async (_, _) => await _core.RetryAsync();
             buttons.Children.Add(retry);
         }
-        var settings = new Button { Content = "Open Settings" };
+        var settings = new Button { Content = Loc.T("connection.openSettings") };
         if (snapshot.Phase == "notConfigured") settings.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
         settings.Click += (_, _) => _openSettings();
         buttons.Children.Add(settings);

@@ -15,7 +15,7 @@ internal static class PortDialog
         var status = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         status.Children.Add(Ui.Dot(Palette.Status(port.Status)));
         status.Children.Add(Ui.Text(port.StatusLabel));
-        if (port.SourceName != null) status.Children.Add(Ui.Text($"· from {port.SourceName}", secondary: true));
+        if (port.SourceName != null) status.Children.Add(Ui.Text(Loc.F("portDialog.from", port.SourceName), secondary: true));
         body.Children.Add(status);
 
         TextBox? nameBox = null;
@@ -26,12 +26,12 @@ internal static class PortDialog
 
         if (admin)
         {
-            nameBox = new TextBox { Header = "Name", Text = port.Name, MaxLength = 13 };
+            nameBox = new TextBox { Header = Loc.T("portDialog.name"), Text = port.Name, MaxLength = 13 };
             body.Children.Add(nameBox);
 
             if (port.IsInput && snapshot.EdidProfiles.Count > 0)
             {
-                edidBox = new ComboBox { Header = "EDID profile", HorizontalAlignment = HorizontalAlignment.Stretch };
+                edidBox = new ComboBox { Header = Loc.T("portDialog.edidProfile"), HorizontalAlignment = HorizontalAlignment.Stretch };
                 foreach (var profile in snapshot.EdidProfiles) edidBox.Items.Add(profile.Name);
                 var current = snapshot.EdidProfiles.ToList().FindIndex(p => p.Id == port.EdidProfile);
                 edidBox.SelectedIndex = current;
@@ -60,17 +60,17 @@ internal static class PortDialog
         }
 
         if (!admin)
-            body.Children.Add(Ui.Text("Add the admin password in Settings to rename ports or change EDID profiles.", "CaptionTextBlockStyle", secondary: true, wrap: true));
+            body.Children.Add(Ui.Text(Loc.T("portDialog.needAdmin"), "CaptionTextBlockStyle", secondary: true, wrap: true));
         body.Children.Add(error);
 
         var dialog = new ContentDialog
         {
-            Title = $"{port.Mode} {port.Number}",
+            Title = Loc.F("portDialog.title", Loc.T(port.IsInput ? "port.input" : "port.output"), port.Number),
             Content = new ScrollViewer { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto },
-            CloseButtonText = admin ? "Cancel" : "Close",
+            CloseButtonText = Loc.T(admin ? "common.cancel" : "common.close"),
             DefaultButton = admin ? ContentDialogButton.Primary : ContentDialogButton.Close,
         };
-        if (admin) dialog.PrimaryButtonText = "Save";
+        if (admin) dialog.PrimaryButtonText = Loc.T("common.save");
 
         dialog.PrimaryButtonClick += async (_, args) =>
         {

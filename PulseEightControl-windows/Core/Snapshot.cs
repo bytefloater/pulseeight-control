@@ -9,7 +9,10 @@ public sealed record LabeledValue(string Label, string Value);
 
 public sealed record SettingsSnapshot(
     string Appearance, bool HighlightGrid, bool ShowStatusBar,
-    string? Host, int Port, int Timeout, int PollInterval, int DetailPollInterval);
+    string? Host, int Port, int Timeout, int PollInterval, int DetailPollInterval,
+    string Language = "system");
+
+public sealed record LanguageSnapshot(string Code, string Name);
 
 public sealed record PortSnapshot(
     string Mode, int Bay, int Number, string Name, string Type,
@@ -27,6 +30,7 @@ public sealed record FrontPanelSnapshot(string? Backlight, bool? StatusLed);
 
 public sealed record Snapshot(
     int Schema, string Phase, string? PhaseDetail, string Summary, string HostLabel, bool AdminConfigured,
+    string Language, IReadOnlyList<LanguageSnapshot> Languages,
     SettingsSnapshot Settings,
     IReadOnlyList<PortSnapshot> Inputs, IReadOnlyList<PortSnapshot> Outputs,
     IReadOnlyList<LabeledValue> SystemRows, IReadOnlyList<LabeledValue> FeatureRows,

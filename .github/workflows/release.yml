@@ -31,6 +31,7 @@ jobs:
       version: ${{ steps.read.outputs.version }}
       prerelease: ${{ steps.read.outputs.prerelease }}
       publish: ${{ steps.read.outputs.publish }}
+      tag: ${{ steps.read.outputs.tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -63,7 +64,11 @@ jobs:
               [ -n "$value" ] || { echo "::error::The repository variable $name isn't set (docs/releasing.md)." >&2; exit 1; }
             done
           fi
-          { echo "version=$version"; echo "prerelease=$prerelease"; echo "publish=$publish"; } >> "$GITHUB_OUTPUT"
+          # The release in the releases repository is named after the tag that started this run (v0.2.0 or
+          # v0.2.0-rc.1), never just after VERSION, so a pre-release can't take the real release's name.
+          tag="v$version"
+          [ "$REF_TYPE" = tag ] && tag="$REF_NAME"
+          { echo "version=$version"; echo "prerelease=$prerelease"; echo "publish=$publish"; echo "tag=$tag"; } >> "$GITHUB_OUTPUT"
 
   # The same checks as every pull request, so a release never ships what CI wouldn't pass.
   checks:
@@ -209,6 +214,7 @@ jobs:
     env:
       VERSION: ${{ needs.verify.outputs.version }}
       PRERELEASE: ${{ needs.verify.outputs.prerelease }}
+      TAG: ${{ needs.verify.outputs.tag }}
       RELEASES_REPO: ${{ vars.RELEASES_REPO }}
       GH_TOKEN: ${{ secrets.RELEASE_REPO_TOKEN }}
     steps:
@@ -235,7 +241,7 @@ jobs:
 
       - name: GitHub release in the releases repository
         run: |
-          tag="v$VERSION"
+          tag="$TAG"
           flags=""
           [ "$PRERELEASE" = true ] && flags="--prerelease"
           if ! gh release view "$tag" --repo "$RELEASES_REPO" >/dev/null 2>&1; then
@@ -261,6 +267,7 @@ jobs:
     timeout-minutes: 20
     env:
       VERSION: ${{ needs.verify.outputs.version }}
+      TAG: ${{ needs.verify.outputs.tag }}
       RELEASES_REPO: ${{ vars.RELEASES_REPO }}
       BASE: ${{ vars.UPDATE_BASE_URL }}
       SPARKLE_PUBLIC_KEY: ${{ vars.SPARKLE_PUBLIC_KEY }}
@@ -295,7 +302,7 @@ jobs:
           cd releases
           python3 ../source/scripts/release/appcast.py add appcast-macos.xml \
             --version "$BUILD" --short "$VERSION" \
-            --url "https://github.com/$RELEASES_REPO/releases/download/v$VERSION/PulseEightControl-$VERSION.dmg" \
+            --url "https://github.com/$RELEASES_REPO/releases/download/$TAG/PulseEightControl-$VERSION.dmg" \
             --length "$length" --signature "$signature" --min-os 14.0 --notes-file ../notes/notes.html \
             --title "PulseEight Control" --link "$BASE"
           python3 ../source/scripts/release/appcast.py validate appcast-macos.xml
@@ -321,7 +328,7 @@ jobs:
             feed="appcast-windows-$arch.xml"
             (cd releases && python3 ../source/scripts/release/appcast.py add "$feed" \
               --version "$windows_version" --short "$VERSION" --os windows --signature-attribute signature \
-              --url "https://github.com/$RELEASES_REPO/releases/download/v$VERSION/$name" \
+              --url "https://github.com/$RELEASES_REPO/releases/download/$TAG/$name" \
               --length "$length" --signature "$signature" --notes-file ../notes/notes.html \
               --title "PulseEight Control" --link "$BASE" \
               && python3 ../source/scripts/release/appcast.py validate "$feed")

@@ -86,7 +86,7 @@ jobs:
         env:
           P8_VERSION: ${{ env.VERSION }}
           P8_BUILD: ${{ github.run_number }}
-          P8_UPDATE_FEED_URL: ${{ vars.UPDATE_BASE_URL && format('{0}/appcast-macos.xml', vars.UPDATE_BASE_URL) || '' }}
+          P8_UPDATE_FEED_URL: ${{ vars.UPDATE_BASE_URL && vars.SPARKLE_PUBLIC_KEY && format('{0}/appcast-macos.xml', vars.UPDATE_BASE_URL) || '' }}
           P8_SPARKLE_PUBLIC_KEY: ${{ vars.SPARKLE_PUBLIC_KEY }}
         run: |
           PulseEightControl-macos/package.sh release --universal

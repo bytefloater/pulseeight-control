@@ -59,8 +59,12 @@ try {
     for ($i = 0; $i -lt 100 -and -not $port; $i++) {
         if ($fake.HasExited) { throw "p8fake exited early: $(Get-Content $fakeErr -Raw)" }
         if (Test-Path $fakeLog) {
-            $match = [regex]::Match([string] (Get-Content $fakeLog -Raw), 'http://[^:\s]+:(\d+)') # the file starts out empty: -Raw gives $null
-            if ($match.Success) { $port = [int] $match.Groups[1].Value }
+            # The file starts out empty, and then Get-Content -Raw gives nothing at all (not even an empty string).
+            $text = Get-Content $fakeLog -Raw
+            if ($text) {
+                $match = [regex]::Match($text, 'http://[^:\s]+:(\d+)')
+                if ($match.Success) { $port = [int] $match.Groups[1].Value }
+            }
         }
         if (-not $port) { Start-Sleep -Milliseconds 100 }
     }

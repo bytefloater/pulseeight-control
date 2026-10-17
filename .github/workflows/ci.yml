@@ -75,6 +75,10 @@ jobs:
           P8_FAKE_SERVER: ${{ github.workspace }}/out/fake/debug/p8fake
         run: dotnet test PulseEightControl-windows/Core.Tests
 
+      - name: Updater (Windows, UI-free) tests
+        if: ${{ !cancelled() }}
+        run: dotnet test PulseEightControl-windows/Updates.Tests
+
       - name: Helper script tests
         if: ${{ !cancelled() }}
         run: python3 scripts/run-tests.py

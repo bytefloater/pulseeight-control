@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The Windows updater, without any UI: checks a signed feed, downloads and verifies an update, runs its
+       installer. The WinUI app draws the windows; everything that can be tested without a screen is here, so
+       it builds and tests on any OS. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <RootNamespace>PulseEight.Updates</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Core only: no UI package. Pinned exactly; an updater is code that replaces the app. -->
+    <PackageReference Include="NetSparkleUpdater.SparkleUpdater" Version="3.1.0" />
+  </ItemGroup>
+
+</Project>

@@ -9,6 +9,8 @@ JSON. See `../docs/core-interface.md` and `../docs/localisation.md`.
 |---|---|
 | `Core` (`PulseEight.Core`) | Managed wrapper over the C interface (`CoreClient`, snapshot types). No UI, builds on any OS. |
 | `Core.Tests` | xUnit tests; the end-to-end ones run against the real library and the Swift fake matrix (`../PulseEightFakeServer`). |
+| `Updates` (`PulseEight.Updates`) | The updater without any UI: reads a signed feed, downloads and verifies an update, runs its installer (NetSparkle's core). Builds on any OS. |
+| `Updates.Tests` | xUnit tests with a local signed feed and download server; they run on any OS and need no matrix. |
 | `App` (`PulseEightControl`) | The WinUI 3 app. The interface is built in code; the only XAML is `App.xaml`, which WinUI needs to load its control styles. |
 
 ## Build and run

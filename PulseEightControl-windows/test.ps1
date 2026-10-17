@@ -19,3 +19,7 @@ Write-Host '== Running Core.Tests'
 $env:P8_CORE_LIBRARY = Join-Path $native 'pulseeight_core.dll'
 Invoke-Native dotnet test (Join-Path $PSScriptRoot 'Core.Tests') "-p:Platform=$platform"
 if ($LASTEXITCODE -ne 0) { throw 'tests failed' }
+
+Write-Host '== Running Updates.Tests'
+Invoke-Native dotnet test (Join-Path $PSScriptRoot 'Updates.Tests') "-p:Platform=$platform"
+if ($LASTEXITCODE -ne 0) { throw 'update tests failed' }

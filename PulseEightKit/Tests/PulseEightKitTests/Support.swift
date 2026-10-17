@@ -34,6 +34,12 @@ final class MockTransport: HTTPTransport, @unchecked Sendable {
         }
     }
 
+    /// This mock's reply to `request`, for tests that override just a few paths and delegate the rest.
+    func handlerResponse(for request: HTTPRequest) -> Result<HTTPResponse, TransportError> {
+        lock.lock(); defer { lock.unlock() }
+        return handler(request)
+    }
+
     static func reply(_ body: String, status: Int = 200) -> Result<HTTPResponse, TransportError> {
         .success(HTTPResponse(status: status, body: Data(body.utf8)))
     }

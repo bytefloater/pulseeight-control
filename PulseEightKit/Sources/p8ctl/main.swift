@@ -15,6 +15,9 @@ Commands:
   route <input> <output>    Route an input to an output, by port name (case-insensitive)
   set <input-bay> <output-bay>
                             Route by bay number
+  capture <dir> [--no-redact]
+                            Save the raw JSON of every endpoint into <dir>, as test fixtures.
+                            Serial numbers and MAC addresses are redacted unless --no-redact.
 """
 
 func fail(_ message: String, code: Int32 = 1) -> Never {
@@ -42,6 +45,13 @@ func takeInt(_ name: String) -> Int? {
     return number
 }
 
+func takeFlag(_ name: String) -> Bool {
+    guard let index = arguments.firstIndex(of: name) else { return false }
+    arguments.remove(at: index)
+    return true
+}
+
+let redact = !takeFlag("--no-redact")
 if let value = takeInt("--port") { port = value }
 if let value = takeInt("--timeout") { timeout = value }
 
@@ -98,6 +108,17 @@ do {
         }
         let result = try await client.setPort(input: input, output: output)
         print(result.message)
+    case "capture":
+        guard arguments.count == 2 else { fail("capture needs <dir>", code: 2) }
+        let directory = URL(fileURLWithPath: arguments[1], isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let result = try await DeviceCapture.capture(from: client, redact: redact)
+        for file in result.files {
+            try file.data.write(to: directory.appendingPathComponent(file.name))
+            print("wrote \(file.name)")
+        }
+        for note in result.skipped { print("skipped \(note)") }
+        if redact { print("Serial numbers and MAC addresses were redacted. Port names were not: check them before committing.") }
     default:
         fail("Unknown command '\(command)'\n\n\(usage)", code: 2)
     }

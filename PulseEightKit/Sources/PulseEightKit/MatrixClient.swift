@@ -56,6 +56,12 @@ public struct MatrixClient: Sendable {
         return try await setPort(input: input.bay, output: output.bay)
     }
 
+    /// The device's reply to `path`, exactly as received (after the usual status and `Result` checks).
+    /// For recording real responses as test fixtures; see `DeviceCapture`.
+    public func rawResponse(_ path: String) async throws -> Data {
+        try await fetch(path)
+    }
+
     // MARK: Plumbing
 
     private func get<T: Decodable>(_ path: String, as type: T.Type = T.self) async throws -> T {

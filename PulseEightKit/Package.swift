@@ -18,7 +18,12 @@ let package = Package(
         .target(name: "PulseEightCore", dependencies: ["PulseEightKit"]),
         .target(name: "PulseEightCoreExports", dependencies: ["PulseEightCore"]),
         .executableTarget(name: "p8ctl", dependencies: ["PulseEightKit"]),
-        .testTarget(name: "PulseEightKitTests", dependencies: ["PulseEightKit"]),
+        .testTarget(
+            name: "PulseEightKitTests",
+            dependencies: ["PulseEightKit"],
+            // Responses captured from a real matrix (`p8ctl capture`); see Fixtures/Real/README.md.
+            resources: [.copy("Fixtures")]
+        ),
         .testTarget(name: "PulseEightCoreTests", dependencies: ["PulseEightCore", "PulseEightKit"]),
     ]
 )

@@ -10,6 +10,8 @@ public struct CoreSnapshot: Codable, Equatable, Sendable {
         public var appearance: String
         public var highlightGrid: Bool
         public var showStatusBar: Bool
+        /// Whether the app looks for updates by itself (the Windows updater reads this).
+        public var checkForUpdates: Bool
         /// The saved choice: a language code, or "system".
         public var language: String
         public var host: String?
@@ -141,6 +143,7 @@ extension CoreSnapshot {
                 appearance: update.settings.appearance.rawValue,
                 highlightGrid: update.settings.highlightGrid,
                 showStatusBar: update.settings.showStatusBar,
+                checkForUpdates: update.settings.checkForUpdates,
                 language: update.settings.language,
                 host: matrix.host,
                 port: matrix.port,

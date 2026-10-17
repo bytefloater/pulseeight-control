@@ -10,6 +10,26 @@ private func scratchFile(_ name: String = "settings.json") throws -> (url: URL, 
 }
 
 @Suite struct SettingsFileTests {
+    @Test func updateChecksDefaultOnAndSurviveARoundTrip() throws {
+        let (url, cleanup) = try scratchFile()
+        defer { cleanup() }
+        #expect(AppSettings().checkForUpdates)
+
+        var settings = AppSettings()
+        settings.checkForUpdates = false
+        try settings.save(to: url)
+        #expect(AppSettings.load(from: url).checkForUpdates == false)
+    }
+
+    @Test func aSettingsFileFromBeforeUpdatesExistedStillLoadsWithChecksOn() throws {
+        let (url, cleanup) = try scratchFile()
+        defer { cleanup() }
+        try Data(#"{"matrix":{"host":"10.0.0.9"},"appearance":"dark"}"#.utf8).write(to: url)
+        let settings = AppSettings.load(from: url)
+        #expect(settings.checkForUpdates)
+        #expect(settings.matrix.host == "10.0.0.9")
+    }
+
     @Test func aMissingFileGivesDefaults() throws {
         let (url, cleanup) = try scratchFile()
         defer { cleanup() }
@@ -89,6 +109,13 @@ private func scratchFile(_ name: String = "settings.json") throws -> (url: URL, 
         #expect(settings.appearance == .system)
         #expect(settings.matrix.host == "10.0.0.9")
         #expect(settings.matrix.port == 8080)
+    }
+
+    @Test func aWrongTypedUpdateFlagKeepsTheDefaultAndEverythingElse() throws {
+        let settings = try load(#"{"matrix":{"host":"10.0.0.9"},"checkForUpdates":"nope","appearance":"dark"}"#)
+        #expect(settings.checkForUpdates)
+        #expect(settings.matrix.host == "10.0.0.9")
+        #expect(settings.appearance == .dark)
     }
 
     @Test func aWrongTypedFlagKeepsEverythingElse() throws {

@@ -86,6 +86,20 @@ import PulseEightCoreExports
         #expect(snapshot.settings.highlightGrid == false)
     }
 
+    @Test func theUpdateCheckSettingIsACommandAndPersists() throws {
+        let (first, scratch) = try makeHandle()
+        #expect(try snapshot(first).settings.checkForUpdates, "on by default")
+
+        #expect(try call(first, #"{"cmd":"setCheckForUpdates","on":false}"#)["ok"] as? Bool == true)
+        #expect(try snapshot(first).settings.checkForUpdates == false)
+        #expect(try call(first, #"{"cmd":"setCheckForUpdates","on":"yes"}"#)["ok"] as? Bool == false, "a non-boolean is refused")
+        p8_destroy(first)
+
+        let second = try #require(p8_create())
+        defer { p8_destroy(second); _ = scratch }
+        #expect(try snapshot(second).settings.checkForUpdates == false, "the choice is remembered")
+    }
+
     @Test func settingsPersistAcrossHandles() throws {
         let (first, scratch) = try makeHandle()
         _ = try call(first, #"{"cmd":"saveSettings","host":"10.9.8.7","port":8080}"#)

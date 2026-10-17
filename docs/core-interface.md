@@ -46,6 +46,7 @@ Request `{"cmd": "...", ...}`; response `{"ok":true}` (plus `"value"` for `valid
 | `setLanguage` | `value`: a code from the snapshot's `languages`, or `system` |
 | `strings` | returns the whole text table for the language in force, a JSON object in `value` (see [localisation](localisation.md)) |
 | `setHighlightGrid`, `setShowStatusBar` | `on`: bool |
+| `setCheckForUpdates` | `on`: bool. Whether the app looks for updates by itself. Read by the Windows updater; the macOS app leaves this to Sparkle. |
 | `validatePortName` | `name`; returns the trimmed name in `value` |
 
 Admin-gated commands (`renamePort`, `setEdid`, `setBacklight`, `setStatusLed`) fail with a message
@@ -58,7 +59,7 @@ if no admin password is saved.
 ```
 schema, phase, phaseDetail?, summary, hostLabel, adminConfigured,
 language ("en": the language in force), languages [ {code, name} ] (name is in that language),
-settings { appearance, highlightGrid, showStatusBar, language ("system" or a code), host?, port, timeout,
+settings { appearance, highlightGrid, showStatusBar, checkForUpdates, language ("system" or a code), host?, port, timeout,
            pollInterval, detailPollInterval },
 inputs[], outputs[]  -> port {
     mode, bay, number, name, type,

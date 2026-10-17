@@ -300,6 +300,11 @@ public final class AppCore: @unchecked Sendable {
         persist()
     }
 
+    public func setCheckForUpdates(_ on: Bool) {
+        mutateSettings { $0.checkForUpdates = on }
+        persist()
+    }
+
     // MARK: Internals
 
     private func persist() {

@@ -7,7 +7,7 @@ import PulseEightKit
 ///
 /// Commands: route, renamePort, setEdid, setBacklight, setStatusLed, retry, reconnect,
 /// saveSettings, removeAdminPassword, setAppearance, setLanguage, strings, setHighlightGrid,
-/// setShowStatusBar, validatePortName. See `docs/core-interface.md` for the fields of each.
+/// setShowStatusBar, setCheckForUpdates, validatePortName. See `docs/core-interface.md` for the fields of each.
 extension AppCore {
     public func handle(requestJSON: String) async -> String {
         guard let data = requestJSON.data(using: .utf8),
@@ -62,6 +62,8 @@ extension AppCore {
                 setHighlightGrid(try bool(object, "on"))
             case "setShowStatusBar":
                 setShowStatusBar(try bool(object, "on"))
+            case "setCheckForUpdates":
+                setCheckForUpdates(try bool(object, "on"))
             case "validatePortName":
                 return Self.success(value: try validatePortName(try string(object, "name")))
             default:

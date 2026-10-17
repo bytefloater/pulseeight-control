@@ -17,13 +17,16 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var showStatusBar = true
     /// A language code (see `Languages.all`) or `Languages.systemSetting` to follow the OS.
     public var language = Languages.systemSetting
+    /// Whether the app looks for updates by itself. Read by the Windows updater; the macOS app leaves
+    /// this to Sparkle, which remembers its own choice.
+    public var checkForUpdates = true
 
     public init() {}
 
     /// Spelled out (rather than synthesized) so the decoding below can name it. The names are the property
     /// names, exactly what the synthesized keys were, so existing settings files keep loading.
     enum CodingKeys: String, CodingKey {
-        case matrix, appearance, highlightGrid, showStatusBar, language
+        case matrix, appearance, highlightGrid, showStatusBar, language, checkForUpdates
     }
 
     /// Each field decodes on its own: a value this version doesn't understand (a newer version's new
@@ -36,6 +39,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         highlightGrid = Self.lenient(c, .highlightGrid) ?? true
         showStatusBar = Self.lenient(c, .showStatusBar) ?? true
         language = Self.lenient(c, .language) ?? Languages.systemSetting
+        checkForUpdates = Self.lenient(c, .checkForUpdates) ?? true
     }
 
     private static func lenient<T: Decodable>(_ container: KeyedDecodingContainer<CodingKeys>, _ key: CodingKeys) -> T? {

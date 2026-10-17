@@ -178,6 +178,28 @@ public enum StringKey: String, CaseIterable, Sendable {
     case settingsLanguageCaption = "settings.language.caption"
     case languageSystem = "language.system"
 
+    // MARK: Updates (the Windows updater; the macOS app uses Sparkle's own text)
+    case settingsUpdates = "settings.updates"
+    case settingsUpdatesAuto = "settings.updates.auto"
+    case settingsUpdatesAutoCaption = "settings.updates.auto.caption"
+    case settingsUpdatesCheckNow = "settings.updates.checkNow"
+    case settingsUpdatesVersion = "settings.updates.version"
+    case settingsUpdatesLastChecked = "settings.updates.lastChecked"
+    case settingsUpdatesNeverChecked = "settings.updates.neverChecked"
+    case settingsUpdatesUnavailable = "settings.updates.unavailable"
+    case updateTitle = "update.title"
+    case updateAvailable = "update.available"
+    case updateNotes = "update.notes"
+    case updateNoNotes = "update.noNotes"
+    case updateInstall = "update.install"
+    case updateLater = "update.later"
+    case updateSkip = "update.skip"
+    case updateDownloading = "update.downloading"
+    case updateInstalling = "update.installing"
+    case updateUpToDate = "update.upToDate"
+    case updateCheckFailed = "update.checkFailed"
+    case updateDownloadFailed = "update.downloadFailed"
+
     // MARK: Errors raised by the core (shown to the user)
     case errorNotStarted = "error.notStarted"
     case errorNameEmpty = "error.nameEmpty"

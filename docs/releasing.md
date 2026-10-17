@@ -143,7 +143,7 @@ updates itself with NetSparkle's core library under our own WinUI 3 windows (`Ap
 A **manual run** with "publish" off builds and signs everything and uploads it to the run only: a dry run.
 
 Repository variables: `RELEASES_REPO` (`owner/name`), `UPDATE_BASE_URL` (where the releases repository's feeds
-are served, no trailing slash), `SPARKLE_PUBLIC_KEY`. Secrets: `SPARKLE_ED_PRIVATE_KEY`, `RELEASES_REPO_TOKEN` (a
+are served, no trailing slash), `SPARKLE_PUBLIC_KEY`. Secrets: `SPARKLE_ED_PRIVATE_KEY`, `RELEASE_REPO_TOKEN` (a
 fine-grained token that can write to the releases repository and nothing else).
 
 ## What is not verified yet

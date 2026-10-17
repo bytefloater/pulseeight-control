@@ -5,7 +5,7 @@
       location = "group:PulseEightKit">
    </FileRef>
    <FileRef
-      location = "group:PulseEightControl-macos">
+      location = "group:PulseEightControl-macos/PulseEightControl.xcodeproj">
    </FileRef>
    <FileRef
       location = "group:PulseEightControl-windows">

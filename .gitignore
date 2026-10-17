@@ -8,12 +8,11 @@ legacy/PulseEightWeb/scripts/windows/tools/
 .DS_Store
 .build/
 .swiftpm/
-*.xcodeproj
 
 # Xcode user state (the workspace itself is committed)
 xcuserdata/
 *.xcuserstate
-xcshareddata/
+xcshareddata/swiftpm/
 
 # build output of every project (.NET artifacts, SwiftPM scratch paths, staged native DLLs)
 out/
@@ -22,3 +21,4 @@ out/
 bin/
 obj/
 
+Thumbs.db

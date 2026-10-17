@@ -37,7 +37,7 @@ or **Ctrl/Cmd+Shift+B** for the default build):
 | `Package: macOS app` | (macOS only) | `PulseEightControl-macos/package.sh`: builds `out/macos/PulseEightControl.app` with its icon (`PulseEightControl.icon`) |
 | `Run: app` | build and start the app | build and start the app |
 | `Run: app against fake matrix` | starts `p8fake`, then runs the app with a throwaway config (`out/dev-config`) that points at it | same |
-| `Test: all` | Swift tests for `PulseEightKit` and `PulseEightFakeServer`, plus the C# end-to-end tests | the two Swift suites |
+| `Test: all` | Swift tests for `PulseEightKit` and `PulseEightFakeServer`, the C# end-to-end tests (`test.ps1`), the app smoke test (`smoke.ps1`), the helper-script tests | the Swift suites (kit, fake server, macOS app), the `p8ctl` smoke test, the helper-script tests |
 | `Fake matrix: start` | runs `p8fake` on `127.0.0.1:8080` (admin password `secret`) | same |
 | `Clean: all build output` | deletes `out/` and the Swift `.build` folders | same |
 

@@ -155,8 +155,65 @@
             "problemMatcher": ["$msCompile"]
         },
         {
+            "label": "Test: macOS app",
+            "detail": "macOS only: the app's model and flows against an in-process fake matrix.",
+            "type": "process",
+            "command": "echo",
+            "args": ["macOS only: skipped."],
+            "osx": {
+                "command": "swift",
+                "args": ["test", "--package-path", "${workspaceFolder}/PulseEightControl-macos"],
+                "problemMatcher": ["$swiftc"]
+            },
+            "group": "test",
+            "presentation": { "reveal": "always", "panel": "shared", "clear": true }
+        },
+        {
+            "label": "Test: smoke (p8ctl against p8fake)",
+            "detail": "macOS/Linux: builds p8fake and p8ctl, then runs the real tools against each other over a socket.",
+            "type": "process",
+            "command": "echo",
+            "args": ["macOS/Linux only: skipped (Windows runs the app smoke test instead)."],
+            "osx": { "command": "${workspaceFolder}/scripts/ci/smoke-p8ctl.sh", "args": [] },
+            "linux": { "command": "${workspaceFolder}/scripts/ci/smoke-p8ctl.sh", "args": [] },
+            "group": "test",
+            "presentation": { "reveal": "always", "panel": "shared", "clear": true }
+        },
+        {
+            "label": "Test: smoke (Windows app)",
+            "detail": "Windows only: launches the built WinUI app against p8fake and checks it opens, connects and closes cleanly.",
+            "type": "process",
+            "command": "echo",
+            "args": ["Windows only: skipped."],
+            "windows": {
+                "command": "powershell",
+                "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/PulseEightControl-windows/smoke.ps1"]
+            },
+            "group": "test",
+            "presentation": { "reveal": "always", "panel": "shared", "clear": true }
+        },
+        {
+            "label": "Test: helper scripts",
+            "detail": "Python unit tests for the CI helper scripts (scripts/ci).",
+            "type": "process",
+            "command": "python3",
+            "args": ["-m", "unittest", "discover", "-s", "scripts/ci", "-p", "test_*.py"],
+            "windows": { "command": "py", "args": ["-3", "-m", "unittest", "discover", "-s", "scripts/ci", "-p", "test_*.py"] },
+            "options": { "cwd": "${workspaceFolder}" },
+            "group": "test",
+            "presentation": { "reveal": "always", "panel": "shared", "clear": true }
+        },
+        {
             "label": "Test: all",
-            "dependsOn": ["Test: PulseEightKit", "Test: PulseEightFakeServer", "Test: Windows app (end to end)"],
+            "dependsOn": [
+                "Test: PulseEightKit",
+                "Test: PulseEightFakeServer",
+                "Test: macOS app",
+                "Test: helper scripts",
+                "Test: smoke (p8ctl against p8fake)",
+                "Test: Windows app (end to end)",
+                "Test: smoke (Windows app)"
+            ],
             "dependsOrder": "sequence",
             "group": { "kind": "test", "isDefault": true },
             "problemMatcher": []

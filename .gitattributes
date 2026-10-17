@@ -3,3 +3,6 @@
 
 # Shell scripts must keep LF endings, even in a Windows checkout (CI runs some of them there).
 *.sh text eol=lf
+
+# Signed test files: their bytes are what the signature covers, so no line-ending conversion on checkout.
+PulseEightControl-windows/Updates.Tests/Fixtures/* -text

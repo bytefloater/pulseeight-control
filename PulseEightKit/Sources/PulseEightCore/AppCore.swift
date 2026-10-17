@@ -156,7 +156,7 @@ public final class AppCore: @unchecked Sendable {
 
     /// Connects (if a host is configured) and starts polling. Safe to call more than once.
     public func start() async {
-        let alreadyStarted = locked { store != nil }
+        let alreadyStarted = locked { self.store != nil }
         guard !alreadyStarted else { return }
         let password = (try? secrets.secret(for: Self.adminAccount)) ?? nil
         let config = settings.matrix

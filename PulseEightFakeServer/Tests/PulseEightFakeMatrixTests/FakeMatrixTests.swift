@@ -139,7 +139,13 @@ import PulseEightKit
     /// that server's clients from its own, different matrix.
     @Test func aStoppedServerNeverAnswersALaterServersClients() async throws {
         let transport = makeDefaultTransport(timeout: 5)
-        for round in 0..<300 {
+        // Each round starts two servers and makes new connections; Windows takes ~0.7 s a round (300 rounds was 207 s in CI).
+        #if os(Windows)
+        let rounds = 40
+        #else
+        let rounds = 300
+        #endif
+        for round in 0..<rounds {
             let dead = try startServer()
             dead.stop() // immediately, so its accept thread may not have started waiting yet
             let live = try startServer() // typically reuses the descriptor number `dead` just freed

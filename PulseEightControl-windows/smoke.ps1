@@ -59,7 +59,7 @@ try {
     for ($i = 0; $i -lt 100 -and -not $port; $i++) {
         if ($fake.HasExited) { throw "p8fake exited early: $(Get-Content $fakeErr -Raw)" }
         if (Test-Path $fakeLog) {
-            $match = [regex]::Match((Get-Content $fakeLog -Raw), 'http://[^:\s]+:(\d+)')
+            $match = [regex]::Match([string] (Get-Content $fakeLog -Raw), 'http://[^:\s]+:(\d+)') # the file starts out empty: -Raw gives $null
             if ($match.Success) { $port = [int] $match.Groups[1].Value }
         }
         if (-not $port) { Start-Sleep -Milliseconds 100 }

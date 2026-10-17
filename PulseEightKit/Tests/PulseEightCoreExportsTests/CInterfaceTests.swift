@@ -25,11 +25,19 @@ import PulseEightCoreExports
         Unmanaged<SnapshotLog>.fromOpaque(context).takeUnretainedValue().add(String(cString: json))
     }
 
+    private func setEnvironment(_ name: String, _ value: String) {
+        #if os(Windows)
+        _ = _putenv_s(name, value)
+        #else
+        setenv(name, value, 1)
+        #endif
+    }
+
     /// A handle over fresh scratch settings. Keep the scratch alive for the test's duration.
     func makeHandle() throws -> (handle: UnsafeMutableRawPointer, scratch: Scratch) {
         let scratch = Scratch()
-        setenv("P8_CONFIG_DIR", scratch.url.path, 1)
-        setenv("P8_SECRET_STORE", "file", 1)
+        setEnvironment("P8_CONFIG_DIR", scratch.url.path)
+        setEnvironment("P8_SECRET_STORE", "file")
         return (try #require(p8_create()), scratch)
     }
 

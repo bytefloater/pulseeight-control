@@ -10,7 +10,7 @@ public sealed record LabeledValue(string Label, string Value);
 public sealed record SettingsSnapshot(
     string Appearance, bool HighlightGrid, bool ShowStatusBar,
     string? Host, int Port, int Timeout, int PollInterval, int DetailPollInterval,
-    string Language = "system");
+    string Language = "system", bool CheckForUpdates = true);
 
 public sealed record LanguageSnapshot(string Code, string Name);
 

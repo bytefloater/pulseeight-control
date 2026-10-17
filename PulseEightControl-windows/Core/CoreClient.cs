@@ -126,6 +126,10 @@ public sealed class CoreClient : IDisposable
     public Task<CommandResult> SetShowStatusBarAsync(bool on) =>
         CallAsync("setShowStatusBar", new Dictionary<string, object?> { ["on"] = on });
 
+    /// <summary>Whether the app looks for updates by itself (the updater reads this setting).</summary>
+    public Task<CommandResult> SetCheckForUpdatesAsync(bool on) =>
+        CallAsync("setCheckForUpdates", new Dictionary<string, object?> { ["on"] = on });
+
     public Task<CommandResult> ValidatePortNameAsync(string name) =>
         CallAsync("validatePortName", new Dictionary<string, object?> { ["name"] = name });
 

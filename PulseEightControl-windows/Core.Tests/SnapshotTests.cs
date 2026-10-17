@@ -32,6 +32,18 @@ public sealed class SnapshotTests
         Assert.Equal("en", snapshot.Language);
         Assert.Equal("English", snapshot.Languages[0].Name);
         Assert.Equal("system", snapshot.Settings.Language);
+        Assert.True(snapshot.Settings.CheckForUpdates, "a snapshot without the field means updates stay on");
+    }
+
+    [Fact]
+    public void ReadsTheUpdateCheckSetting()
+    {
+        const string json = """
+        {"schema":1,"phase":"notConfigured","summary":"","hostLabel":"","adminConfigured":false,"language":"en","languages":[],
+         "settings":{"appearance":"system","highlightGrid":true,"showStatusBar":true,"checkForUpdates":false,"language":"system","port":80,"timeout":10,"pollInterval":5,"detailPollInterval":20},
+         "inputs":[],"outputs":[],"systemRows":[],"featureRows":[],"updates":[],"edidProfiles":[]}
+        """;
+        Assert.False(Snapshot.Parse(json).Settings.CheckForUpdates);
     }
 
     [Fact]

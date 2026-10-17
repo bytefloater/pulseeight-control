@@ -241,6 +241,21 @@ public sealed class CoreClientTests(FakeMatrixFixture fake)
     }
 
     [CoreFact]
+    public async Task TheUpdateCheckSettingCanBeTurnedOffAndStaysOff()
+    {
+        using (var first = new CoreClient())
+        {
+            Assert.True(first.Snapshot.Settings.CheckForUpdates, "on by default");
+            Assert.True((await first.SetCheckForUpdatesAsync(false)).Ok);
+            Assert.False(first.Snapshot.Settings.CheckForUpdates);
+        }
+
+        using var second = new CoreClient();
+        Assert.False(second.Snapshot.Settings.CheckForUpdates, "remembered across a restart");
+        Assert.True((await second.SetCheckForUpdatesAsync(true)).Ok);
+    }
+
+    [CoreFact]
     public async Task MalformedFieldsAreRefusedNotFatal()
     {
         using var core = new CoreClient();

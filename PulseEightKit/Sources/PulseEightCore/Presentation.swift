@@ -5,10 +5,18 @@ import PulseEightKit
 public struct LabeledValue: Codable, Equatable, Sendable {
     public var label: String
     public var value: String
+    /// Health rows only: whether what the line describes is in good order (nil when that isn't a judgement the
+    /// matrix makes, e.g. uptime). Not in the JSON when nil.
+    public var ok: Bool?
+    /// Health rows only: `health` for the matrix's own verdict and its parts, `diagnostics` for the raw readings
+    /// (temperatures, supply rails). Not in the JSON when nil.
+    public var group: String?
 
-    public init(_ label: String, _ value: String) {
+    public init(_ label: String, _ value: String, ok: Bool? = nil, group: String? = nil) {
         self.label = label
         self.value = value
+        self.ok = ok
+        self.group = group
     }
 }
 
@@ -69,21 +77,27 @@ public enum Presentation {
 
     /// The health report as label/value lines, for UIs that show plain rows.
     public static func healthRows(_ health: SystemHealth, _ strings: Strings) -> [LabeledValue] {
-        var result: [(String, String?)] = [
-            (strings.text(.rowStatus), health.statusMessage),
-            (strings.text(.healthUptime), health.uptime.map { durationText(seconds: $0, strings) }),
+        func row(_ label: String, _ value: String?, ok: Bool? = nil, group: String) -> LabeledValue? {
+            guard let value, !value.isEmpty else { return nil }
+            return LabeledValue(label, value, ok: ok, group: group)
+        }
+        var result: [LabeledValue?] = [
+            row(strings.text(.rowStatus), health.statusMessage, ok: health.status == 0, group: "health"),
+            row(strings.text(.healthUptime), health.uptime.map { durationText(seconds: $0, strings) }, group: "health"),
         ]
         for part in health.components {
-            result.append((componentName(part.kind, strings), part.message.isEmpty ? String(part.status) : part.message))
+            result.append(row(
+                componentName(part.kind, strings), part.message.isEmpty ? String(part.status) : part.message,
+                ok: part.isHealthy, group: "health"))
         }
         for (index, celsius) in health.temperatures.enumerated() {
-            result.append((strings.text(.healthTemperature, index + 1), temperatureText(celsius, strings)))
+            result.append(row(strings.text(.healthTemperature, index + 1), temperatureText(celsius, strings), group: "diagnostics"))
         }
         for rail in health.rails {
-            result.append((strings.text(.healthRail, rail.name), voltageText(rail, strings)))
+            result.append(row(strings.text(.healthRail, rail.name), voltageText(rail, strings), ok: rail.ok, group: "diagnostics"))
         }
-        result.append((strings.text(.healthUpdateState), health.updateState.map(String.init)))
-        return rows(result)
+        result.append(row(strings.text(.healthUpdateState), health.updateState.map(String.init), group: "health"))
+        return result.compactMap { $0 }
     }
 
     /// "Input" / "Output".

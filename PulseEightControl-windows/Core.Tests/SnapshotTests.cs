@@ -47,6 +47,50 @@ public sealed class SnapshotTests
     }
 
     [Fact]
+    public void ReadsTheMatricesHealthRowsAndSystemError()
+    {
+        const string json = """
+        {"schema":1,"phase":"connected","summary":"","hostLabel":"Lounge","adminConfigured":false,"language":"en","languages":[],
+         "settings":{"appearance":"system","highlightGrid":true,"showStatusBar":true,"language":"system","port":80,"timeout":10,"pollInterval":5,"detailPollInterval":20},
+         "matrices":[
+           {"id":"a","name":"Lounge","displayName":"Lounge","host":"10.0.0.2","port":80,"timeout":10,"pollInterval":5,"detailPollInterval":20,"adminPasswordSaved":true,"selected":true},
+           {"id":"b","name":"","displayName":"10.0.0.3","host":"10.0.0.3","port":8080,"timeout":10,"pollInterval":5,"detailPollInterval":20,"adminPasswordSaved":false,"selected":false}],
+         "inputs":[],"outputs":[],"systemError":"HTTP 500","systemRows":[],"healthRows":[{"label":"Status","value":"OK","ok":true,"group":"health"},{"label":"Temperature 1","value":"31 °C","group":"diagnostics"}],"featureRows":[],"updates":[],"edidProfiles":[]}
+        """;
+
+        var snapshot = Snapshot.Parse(json);
+
+        Assert.Equal(2, snapshot.Matrices.Count);
+        Assert.Equal("a", snapshot.SelectedMatrix?.Id);
+        Assert.Equal("10.0.0.2", snapshot.Matrices[0].Address);
+        Assert.Equal("10.0.0.3:8080", snapshot.Matrices[1].Address);
+        Assert.True(snapshot.Matrices[0].AdminPasswordSaved);
+        Assert.Equal("HTTP 500", snapshot.SystemError);
+        Assert.Equal(2, snapshot.HealthRows.Count);
+        Assert.True(snapshot.HealthRows[0].Ok);
+        Assert.Equal("health", snapshot.HealthRows[0].Group);
+        Assert.Null(snapshot.HealthRows[1].Ok);
+        Assert.Equal("diagnostics", snapshot.HealthRows[1].Group);
+    }
+
+    [Fact]
+    public void AnOlderSnapshotReadsAsNoMatricesAndNoHealth()
+    {
+        const string json = """
+        {"schema":1,"phase":"notConfigured","summary":"","hostLabel":"","adminConfigured":false,"language":"en","languages":[],
+         "settings":{"appearance":"system","highlightGrid":true,"showStatusBar":true,"language":"system","port":80,"timeout":10,"pollInterval":5,"detailPollInterval":20},
+         "inputs":[],"outputs":[],"systemRows":[],"featureRows":[],"updates":[],"edidProfiles":[]}
+        """;
+
+        var snapshot = Snapshot.Parse(json);
+
+        Assert.Empty(snapshot.Matrices);
+        Assert.Null(snapshot.SelectedMatrix);
+        Assert.Empty(snapshot.HealthRows);
+        Assert.Null(snapshot.SystemError);
+    }
+
+    [Fact]
     public void ParsesCommandResults()
     {
         Assert.True(CommandResult.Parse("""{"ok":true}""").Ok);

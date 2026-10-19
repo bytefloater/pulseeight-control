@@ -50,10 +50,15 @@ internal static class Ui
         };
     }
 
+    /// <summary>Every row of every card is at least this tall, whatever it holds, so pages line up.</summary>
+    public const double RowMinHeight = 64;
+
+    public static Thickness RowPadding => new(16, 12, 16, 12);
+
     /// <summary>Label on the left, value or control on the right.</summary>
     public static Grid Row(string label, UIElement value, string? caption = null)
     {
-        var grid = new Grid { Padding = new Thickness(16, 12, 16, 12), ColumnSpacing = 16, MinHeight = 48 };
+        var grid = new Grid { Padding = RowPadding, ColumnSpacing = 16, MinHeight = RowMinHeight };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var left = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
@@ -74,6 +79,31 @@ internal static class Ui
         text.TextWrapping = TextWrapping.Wrap;
         text.MaxWidth = 320;
         return Row(label, text);
+    }
+
+    /// <summary>A tick (in good order) or a warning triangle, coloured to match, for a line that reports health.</summary>
+    public static FontIcon HealthGlyph(bool ok)
+    {
+        var glyph = new FontIcon
+        {
+            Glyph = ok ? "" : "", FontSize = 16, VerticalAlignment = VerticalAlignment.Center,
+            Foreground = Palette.Status(ok ? 0 : 2),
+        };
+        ToolTipService.SetToolTip(glyph, Loc.T(ok ? "health.good" : "health.attention"));
+        return glyph;
+    }
+
+    /// <summary>A row's value with a health glyph in front of it.</summary>
+    public static Grid HealthRow(string label, string value, bool ok)
+    {
+        var text = Text(value, secondary: true);
+        text.IsTextSelectionEnabled = true;
+        text.TextWrapping = TextWrapping.Wrap;
+        text.MaxWidth = 300;
+        var line = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        line.Children.Add(HealthGlyph(ok));
+        line.Children.Add(text);
+        return Row(label, line);
     }
 
     /// <summary>Two sections side by side when there is room, stacked when there isn't.</summary>
@@ -101,24 +131,25 @@ internal static class Ui
         return grid;
     }
 
-    public static StackPanel Section(string header, UIElement body)
+    /// <param name="first">The first thing under a page heading, which already leaves space: no extra space above it.</param>
+    public static StackPanel Section(string header, UIElement body, bool first = false)
     {
-        var stack = new StackPanel { Spacing = 8 };
+        var stack = new StackPanel { Spacing = 12 };
         var title = Text(header, "BodyStrongTextBlockStyle");
-        title.Margin = new Thickness(2, 12, 0, 0);
+        title.Margin = new Thickness(2, first ? 0 : 24, 0, 0);
         stack.Children.Add(title);
         stack.Children.Add(body);
         return stack;
     }
 
     private const double PageMaxWidth = 1100;
-    private const double PageGutter = 36;
+    private const double PageGutter = 48;
 
     /// <summary>A content column no wider than <see cref="PageMaxWidth"/>, centred in the space it is
     /// given. Sized explicitly: MaxWidth on a stretched element did not centre reliably.</summary>
     public static FrameworkElement Column(UIElement content)
     {
-        var inner = new Grid { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 8, 0, 24) };
+        var inner = new Grid { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 0, 0, 48) };
         inner.Children.Add(content);
         var outer = new Grid { HorizontalAlignment = HorizontalAlignment.Stretch };
         outer.Children.Add(inner);
@@ -134,12 +165,19 @@ internal static class Ui
         HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
     };
 
-    public static FrameworkElement Header(string title)
+    /// <summary>Every page's heading sits in a bar of this height, so what is below it never moves, whether the
+    /// heading is a plain title or a "Hardware > System" breadcrumb.</summary>
+    public const double HeaderHeight = 80;
+
+    public static FrameworkElement HeaderBar(UIElement content)
     {
-        var text = Text(title, "TitleTextBlockStyle");
-        text.Margin = new Thickness(2, 16, 0, 4);
-        return text;
+        var bar = new Grid { Height = HeaderHeight, Margin = new Thickness(2, 0, 0, 0) };
+        if (content is FrameworkElement element) element.VerticalAlignment = VerticalAlignment.Center;
+        bar.Children.Add(content);
+        return bar;
     }
+
+    public static FrameworkElement Header(string title) => HeaderBar(Text(title, "TitleTextBlockStyle"));
 }
 
 /// <summary>Dialogs shown over the window. WinUI allows one at a time, so they queue.</summary>

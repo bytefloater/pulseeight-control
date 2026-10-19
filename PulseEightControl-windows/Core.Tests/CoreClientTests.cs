@@ -132,7 +132,7 @@ public sealed class CoreClientTests(FakeMatrixFixture fake)
         var saved = await core.SaveSettingsAsync("127.0.0.1", fake.Port.ToString(), "3", "2", "5", FakeMatrixFixture.Password);
         Assert.True(saved.Ok, saved.Error);
 
-        var connected = await WaitFor(core, s => s.IsConnected && s.Outputs.Any(o => o.Details.Count > 0), "connection and port details");
+        var connected = await WaitFor(core, s => s.IsConnected && s.Outputs.Any(o => o.Details.Count > 0) && s.SystemRows.Count > 0, "connection, port details and system details");
         Assert.Equal(8, connected.Inputs.Count);
         Assert.Equal(8, connected.Outputs.Count);
         Assert.True(connected.AdminConfigured);

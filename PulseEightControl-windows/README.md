@@ -78,6 +78,8 @@ asked, or writes `crash.log`. It needs an interactive desktop session (not SSH o
   if only a newer .NET runtime is installed).
 * Where text comes from: `Loc.T("key")` reads the table the core serves for the language in force;
   Settings > Language switches it. See `../docs/localisation.md`.
+* Several matrices: Settings > Connections lists them (the tick shows one, Edit changes it, Add matrix adds one, and the dialog's Find asks gotomymatrix.com which matrix is on the network); the chooser at the top of the navigation pane switches between them. Each has its own timings and admin password. The Hardware page is a list of topics in the style of Windows Settings (System, Features, Health, Diagnostics, Front panel, Firmware updates, Inputs, Outputs), each opening its own page with a back button (also Alt+Left). Health and Diagnostics come from the matrix's health report and show a tick or warning beside what the matrix judges; the System page says why the details couldn't be loaded when they couldn't.
+* A connection attempt gets five seconds (`MainWindow.ConnectionGrace`) before the window says the matrix can't be reached, so a first attempt that fails while the network comes up doesn't look like an error.
 * The admin password is kept in a plain file under `%APPDATA%\PulseEightControl` until the core gains
   Windows Credential Manager support.
 

@@ -68,5 +68,11 @@ public sealed class MatricesTests(FakeMatrixFixture fake)
         Assert.All(snapshot.HealthRows, row => Assert.False(string.IsNullOrEmpty(row.Label)));
         Assert.All(snapshot.HealthRows, row => Assert.Contains(row.Group, new[] { "health", "diagnostics" }));
         Assert.Contains(snapshot.HealthRows, row => row.Group == "health" && row.Ok != null);
+
+        // The cloud link (/Monitoring/Settings) arrives with the health report, at the end of the health group.
+        var cloud = await WaitFor(core, s => s.HealthRows.Any(r => r.Label == "Cloud connection"), "the cloud link");
+        var link = Assert.Single(cloud.HealthRows, r => r.Label == "Cloud connection");
+        Assert.NotNull(link.Ok);
+        Assert.Equal("health", link.Group);
     }
 }

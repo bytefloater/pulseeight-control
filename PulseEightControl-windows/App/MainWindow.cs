@@ -35,6 +35,20 @@ public sealed class MainWindow : Window
     private DateTime _graceEnds;
     private string _matrixSignature = "";
 
+    // A restart in progress: from the moment it was sent until the matrix has gone away and come back.
+    private bool _restarting;
+    private bool _restartSawMatrixGo;
+    private bool _restartWaitingForReturn;
+    private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _restartTimer;
+    private string? _selectedMatrixId;
+
+    /// <summary>How long to wait for the matrix to be seen going away before deciding it did not restart. The core keeps
+    /// the connection live for up to 15 seconds after the matrix stops answering, so this must be longer.</summary>
+    private static readonly TimeSpan RestartWatch = TimeSpan.FromSeconds(45);
+
+    /// <summary>The longest to show "Restarting" for. A real restart takes about a minute.</summary>
+    private static readonly TimeSpan RestartLimit = TimeSpan.FromSeconds(180);
+
     /// <summary>How long a new connection attempt is given before the window says the matrix can't be reached.
     /// A first attempt can fail for a moment (the network is just up, the matrix is waking), and "Can't reach
     /// the matrix" for something that then fixes itself is a false alarm.</summary>
@@ -66,13 +80,16 @@ public sealed class MainWindow : Window
         AppWindow.Resize(new SizeInt32(1100, 780));
 
         _routing = new RoutingView(_core, port => _ = PortDialog.ShowAsync(_core, port, _snapshot));
-        _hardware = new HardwareView(_core, port => _ = PortDialog.ShowAsync(_core, port, _snapshot));
+        _hardware = new HardwareView(_core, port => _ = PortDialog.ShowAsync(_core, port, _snapshot), () => _ = ConfirmRestartAsync());
         _hardware.BackStateChanged += UpdateBackButton;
         _updates = new UpdateController(DispatcherQueue, () => _snapshot.Settings.CheckForUpdates);
         _updates.Changed += () => _settings.ShowUpdateState();
         _graceTimer = DispatcherQueue.CreateTimer();
         _graceTimer.IsRepeating = false;
         _graceTimer.Tick += (_, _) => { _graceTimer.Stop(); Refresh(); };
+        _restartTimer = DispatcherQueue.CreateTimer();
+        _restartTimer.IsRepeating = false;
+        _restartTimer.Tick += (_, _) => OnRestartTimer();
         _settings = new SettingsView(_core, _updates, BeginConnectionGrace);
         _about = new AboutView(_updates.InstalledVersion);
         _connection = new ConnectionView(_core, SelectSettings, BeginConnectionGrace);
@@ -217,6 +234,14 @@ public sealed class MainWindow : Window
     private void OnChanged(Snapshot snapshot)
     {
         _snapshot = snapshot;
+        // What was happening to the matrix just left means nothing to the next one.
+        var matrixId = snapshot.SelectedMatrix?.Id;
+        if (matrixId != _selectedMatrixId)
+        {
+            _selectedMatrixId = matrixId;
+            EndRestart();
+        }
+        WatchRestart(snapshot);
         if (snapshot.Language != Loc.Current) ApplyLanguage(snapshot);
         ApplyTheme(snapshot);
         Refresh();
@@ -245,9 +270,83 @@ public sealed class MainWindow : Window
 
     /// <summary>What the window shows: a failure still inside its grace period counts as still connecting.</summary>
     private Snapshot Displayed(Snapshot snapshot) =>
-        snapshot.Phase == "disconnected" && DateTime.UtcNow < _graceEnds
+        _restarting
+            ? snapshot with { Phase = "restarting", PhaseDetail = null, Summary = Loc.F("connection.restarting", snapshot.HostLabel) }
+        : snapshot.Phase == "disconnected" && DateTime.UtcNow < _graceEnds
             ? snapshot with { Phase = "connecting", PhaseDetail = null, Summary = Loc.F("connection.connecting", snapshot.HostLabel) }
             : snapshot;
+
+    // MARK: Restart
+
+    /// <summary>Asks "Restart the matrix?". The matrix restarts the moment it is asked, with no confirmation of its own,
+    /// so nothing sends the request until the person presses Restart here.</summary>
+    private async Task ConfirmRestartAsync()
+    {
+        if (!_snapshot.AdminConfigured || _restarting) return;
+        var dialog = new ContentDialog
+        {
+            Title = Loc.F("maintenance.confirmTitle", _snapshot.HostLabel),
+            Content = Ui.Text(Loc.T("maintenance.confirmBody"), wrap: true),
+            PrimaryButtonText = Loc.T("maintenance.confirmButton"),
+            CloseButtonText = Loc.T("common.cancel"),
+            DefaultButton = ContentDialogButton.Close,
+        };
+        var confirmed = false;
+        dialog.PrimaryButtonClick += (_, _) => confirmed = true;
+        await Dialogs.ShowAsync(dialog);
+        if (!confirmed) return;
+
+        var result = await _core.RestartAsync();
+        if (result.Ok) BeginRestart();
+        else await Dialogs.ErrorAsync(Loc.T("maintenance.error"), result.Error);
+    }
+
+    /// <summary>From now until the matrix has gone away and come back, the window says it is restarting instead of
+    /// showing an error.</summary>
+    private void BeginRestart()
+    {
+        _restarting = true;
+        _restartSawMatrixGo = false;
+        _restartWaitingForReturn = false;
+        _restartTimer.Stop();
+        _restartTimer.Interval = RestartWatch;
+        _restartTimer.Start();
+        Refresh();
+    }
+
+    private void EndRestart()
+    {
+        _restartTimer.Stop();
+        if (!_restarting) return;
+        _restarting = false;
+        Refresh();
+    }
+
+    private void OnRestartTimer()
+    {
+        _restartTimer.Stop();
+        if (!_restarting) return;
+        // First tick, and the matrix was never seen going away: it did not restart after all (or came back before a
+        // poll noticed).
+        if (!_restartWaitingForReturn && !_restartSawMatrixGo) { EndRestart(); return; }
+        // Seen going away: wait for it to come back, for as long as a restart can take.
+        if (!_restartWaitingForReturn)
+        {
+            _restartWaitingForReturn = true;
+            _restartTimer.Interval = RestartLimit;
+            _restartTimer.Start();
+            return;
+        }
+        EndRestart(); // the limit passed
+    }
+
+    private void WatchRestart(Snapshot snapshot)
+    {
+        if (!_restarting) return;
+        var reachable = snapshot.IsConnected && snapshot.SystemError == null;
+        if (!reachable) _restartSawMatrixGo = true;
+        else if (_restartSawMatrixGo) EndRestart();
+    }
 
     /// <summary>The matrix chooser at the top of the pane: the shown matrix's name, a list of all of them, and a way to
     /// manage them. Hidden until a matrix has been added; rebuilt only when the list or the choice changes.</summary>
@@ -326,7 +425,7 @@ public sealed class MainWindow : Window
         UIElement page;
         if (IsSettingsSelected) page = _settings;
         else if (ReferenceEquals(_navigation.SelectedItem, _aboutItem)) page = _about;
-        else if (!_snapshot.IsConnected) page = _connection;
+        else if (!Displayed(_snapshot).IsConnected) page = _connection;
         else if (ReferenceEquals(_navigation.SelectedItem, _hardwareItem)) page = _hardware;
         else page = _routing;
 

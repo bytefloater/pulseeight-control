@@ -186,6 +186,18 @@ public enum StringKey: String, CaseIterable, Sendable {
     case aboutReportIssue = "about.reportIssue"
     case aboutIndependent = "about.independent"
 
+    case hardwareMaintenance = "hardware.maintenance"
+    case hardwareMaintenanceDescription = "hardware.maintenance.description"
+    case maintenanceRestart = "maintenance.restart"
+    case maintenanceRestartButton = "maintenance.restartButton"
+    case maintenanceRestartCaption = "maintenance.restartCaption"
+    case maintenanceConfirmTitle = "maintenance.confirmTitle"
+    case maintenanceConfirmBody = "maintenance.confirmBody"
+    case maintenanceConfirmButton = "maintenance.confirmButton"
+    case maintenanceError = "maintenance.error"
+    case connectionRestarting = "connection.restarting"
+    case connectionRestartingDetail = "connection.restartingDetail"
+
     // MARK: Intervals
     case intervalSeconds = "interval.seconds"
     case intervalMinutes = "interval.minutes"

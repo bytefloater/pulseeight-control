@@ -83,6 +83,11 @@ public sealed class CoreClient : IDisposable
     public Task<CommandResult> SetStatusLedAsync(bool on) =>
         CallAsync("setStatusLed", new Dictionary<string, object?> { ["on"] = on });
 
+    /// <summary>Restarts the selected matrix (admin only). The matrix restarts the moment it is asked, with no
+    /// confirmation of its own, so call this only once the person has said yes; the core refuses without it.</summary>
+    public Task<CommandResult> RestartAsync() =>
+        CallAsync("restart", new Dictionary<string, object?> { ["confirmed"] = true });
+
     public Task<CommandResult> RetryAsync() => CallAsync("retry");
 
     public Task<CommandResult> ReconnectAsync() => CallAsync("reconnect");

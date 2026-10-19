@@ -31,7 +31,7 @@ internal sealed class StatusBarView : UserControl
         var colour = snapshot.Phase switch
         {
             "connected" => Palette.Status(0),
-            "connecting" => Palette.Status(2),
+            "connecting" or "restarting" => Palette.Status(2),
             "disconnected" => Palette.Status(1),
             _ => Palette.Status(3),
         };

@@ -4,8 +4,9 @@
     python3 PulseEightControl-windows/App/Assets/make-icon.py
 
 The .ico holds the sizes Windows asks for (16 to 256 px), each stored as a PNG, which every supported version of
-Windows reads. Needs macOS (it resizes with `sips`) and nothing else; run it again whenever Logo.png changes and
-commit the result. Only the Python standard library is used.
+Windows reads. Logo.png must have a transparent background outside its rounded corners (not white). It is resized
+with Pillow (`pip install pillow`) where that is installed, otherwise with macOS's `sips`; run this again whenever
+Logo.png changes and commit the result.
 """
 import os
 import struct
@@ -21,7 +22,14 @@ SIZES = [16, 24, 32, 48, 64, 128, 256]
 
 def resized(size: int, folder: str) -> bytes:
     out = os.path.join(folder, f"{size}.png")
-    subprocess.run(["sips", "-z", str(size), str(size), SOURCE, "--out", out], check=True, capture_output=True)
+    try:
+        from PIL import Image
+    except ImportError:
+        subprocess.run(["sips", "-z", str(size), str(size), SOURCE, "--out", out], check=True, capture_output=True)
+    else:
+        with Image.open(SOURCE) as logo:
+            # Pillow resizes RGBA with the colour weighted by alpha, so the soft corners don't pick up a fringe.
+            logo.convert("RGBA").resize((size, size), Image.LANCZOS).save(out)
     with open(out, "rb") as handle:
         return handle.read()
 

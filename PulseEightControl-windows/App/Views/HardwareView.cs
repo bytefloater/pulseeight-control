@@ -15,10 +15,11 @@ internal sealed class HardwareView : UserControl
 {
     private static readonly string[] Backlight = ["off", "low", "high"];
 
-    private enum Topic { System, Features, Health, Diagnostics, FrontPanel, Updates, Inputs, Outputs }
+    private enum Topic { System, Features, Health, Diagnostics, FrontPanel, Maintenance, Updates, Inputs, Outputs }
 
     private readonly CoreClient _core;
     private readonly Action<PortSnapshot> _openPort;
+    private readonly Action _requestRestart;
     private readonly ScrollViewer _host = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
     private string _signature = "";
     private bool _building;
@@ -31,10 +32,11 @@ internal sealed class HardwareView : UserControl
     /// <summary>Raised when <see cref="CanGoBack"/> may have changed, so the window can enable its back button.</summary>
     public event Action? BackStateChanged;
 
-    public HardwareView(CoreClient core, Action<PortSnapshot> openPort)
+    public HardwareView(CoreClient core, Action<PortSnapshot> openPort, Action requestRestart)
     {
         _core = core;
         _openPort = openPort;
+        _requestRestart = requestRestart;
         Content = _host;
     }
 
@@ -146,6 +148,7 @@ internal sealed class HardwareView : UserControl
         Topic.Health => snapshot.HealthRows.Any(r => r.Group != "diagnostics"),
         Topic.Diagnostics => snapshot.HealthRows.Any(r => r.Group == "diagnostics"),
         Topic.FrontPanel => snapshot.AdminConfigured && snapshot.FrontPanel != null,
+        Topic.Maintenance => snapshot.AdminConfigured,
         _ => true,
     };
 
@@ -156,6 +159,7 @@ internal sealed class HardwareView : UserControl
         Topic.Health => "hardware.health",
         Topic.Diagnostics => "hardware.diagnostics",
         Topic.FrontPanel => "hardware.frontPanel",
+        Topic.Maintenance => "hardware.maintenance",
         Topic.Updates => "hardware.firmwareUpdates",
         Topic.Inputs => "hardware.inputs",
         _ => "hardware.outputs",
@@ -168,6 +172,7 @@ internal sealed class HardwareView : UserControl
         Topic.Health => HealthCard(snapshot.HealthRows.Where(r => r.Group != "diagnostics")),
         Topic.Diagnostics => HealthCard(snapshot.HealthRows.Where(r => r.Group == "diagnostics")),
         Topic.FrontPanel => FrontPanel(snapshot.FrontPanel!),
+        Topic.Maintenance => Maintenance(),
         Topic.Updates => Updates(snapshot),
         Topic.Inputs => Ports(snapshot.Inputs),
         _ => Ports(snapshot.Outputs),
@@ -229,6 +234,9 @@ internal sealed class HardwareView : UserControl
             Add(Topic.Diagnostics, "", Loc.T("hardware.diagnostics"), Loc.T("hardware.diagnostics.description"));
         if (Available(snapshot, Topic.FrontPanel))
             Add(Topic.FrontPanel, "", Loc.T("hardware.frontPanel"), Loc.T("hardware.frontPanel.description"));
+
+        if (Available(snapshot, Topic.Maintenance))
+            Add(Topic.Maintenance, "\uE7E8", Loc.T("hardware.maintenance"), Loc.T("hardware.maintenance.description"));
 
         Add(Topic.Updates, "", Loc.T("hardware.firmwareUpdates"), Loc.T("hardware.firmwareUpdates.description"),
             snapshot.Updates.Count > 0 ? Note(Loc.Count(snapshot.Updates.Count, "statusbar.firmwareUpdate.one", "statusbar.firmwareUpdate.other")) : null);
@@ -342,6 +350,14 @@ internal sealed class HardwareView : UserControl
         }
 
         return Ui.Card(rows.ToArray());
+    }
+
+    /// <summary>Admin only. The button only asks; the window sends the restart after the person has confirmed.</summary>
+    private UIElement Maintenance()
+    {
+        var restart = new Button { Content = Loc.T("maintenance.restartButton") };
+        restart.Click += (_, _) => _requestRestart();
+        return Ui.Card(Ui.Row(Loc.T("maintenance.restart"), restart, Loc.T("maintenance.restartCaption")));
     }
 
     private static UIElement Updates(Snapshot snapshot)

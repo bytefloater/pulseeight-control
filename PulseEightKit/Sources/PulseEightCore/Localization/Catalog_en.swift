@@ -183,6 +183,18 @@ extension Catalog {
         .aboutReportIssue: "Report a problem",
         .aboutIndependent: "PulseEight Control is an independent project. It is not made by, or affiliated with, Pulse-Eight Ltd.",
 
+        .hardwareMaintenance: "Maintenance",
+        .hardwareMaintenanceDescription: "Restart the matrix",
+        .maintenanceRestart: "Restart",
+        .maintenanceRestartButton: "Restart matrix…",
+        .maintenanceRestartCaption: "Restarting interrupts everything routed through the matrix for about a minute.",
+        .maintenanceConfirmTitle: "Restart {0}?",
+        .maintenanceConfirmBody: "The matrix goes offline for about a minute and everything routed through it is interrupted: displays lose their picture until it is back. PulseEight Control reconnects by itself.",
+        .maintenanceConfirmButton: "Restart",
+        .maintenanceError: "Couldn't restart the matrix",
+        .connectionRestarting: "Restarting {0}…",
+        .connectionRestartingDetail: "This takes about a minute. PulseEight Control reconnects by itself.",
+
         // Intervals
         .intervalSeconds: "{0}s",
         .intervalMinutes: "{0}m",

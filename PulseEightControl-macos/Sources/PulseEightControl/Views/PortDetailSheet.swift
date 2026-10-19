@@ -93,8 +93,11 @@ struct PortDetailSheet: View {
             TextField("Name", text: $model.portEdit.name, prompt: Text("Up to \(AdminClient.maxNameLength) characters"))
                 .onSubmit { model.savePortEdit() }
             if selection.mode == .input {
-                Picker("EDID profile", selection: $model.portEdit.edidProfile) {
-                    ForEach(edidOptions(state), id: \.id) { Text($0.name).tag(Int?.some($0.id)) }
+                ControlRow("EDID profile") {
+                    Picker("EDID profile", selection: $model.portEdit.edidProfile) {
+                        ForEach(edidOptions(state), id: \.id) { Text($0.name).tag(Int?.some($0.id)) }
+                    }
+                    .fixedSize()
                 }
             }
             HStack {

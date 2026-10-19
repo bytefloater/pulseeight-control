@@ -69,13 +69,16 @@ struct SettingsView: View {
     @ViewBuilder
     private var appearancePane: some View {
         Section("Theme") {
-            Picker("Appearance", selection: appearanceBinding) {
-                ForEach(Appearance.allCases, id: \.self) { Text($0.description).tag($0) }
+            ControlRow("Appearance") {
+                Picker("Appearance", selection: appearanceBinding) {
+                    ForEach(Appearance.allCases, id: \.self) { Text($0.description).tag($0) }
+                }
+                .fixedSize()
             }
         }
         Section("Window") {
-            Toggle("Highlight row and column", isOn: highlightBinding)
-            Toggle("Show status bar", isOn: statusBarBinding)
+            ControlRow("Highlight row and column") { Toggle("Highlight row and column", isOn: highlightBinding) }
+            ControlRow("Show status bar") { Toggle("Show status bar", isOn: statusBarBinding) }
         }
     }
 
@@ -86,7 +89,9 @@ struct SettingsView: View {
         }
         if updater.isAvailable {
             Section {
-                Toggle("Automatically check for updates", isOn: $updater.automaticallyChecks)
+                ControlRow("Automatically check for updates") {
+                    Toggle("Automatically check for updates", isOn: $updater.automaticallyChecks)
+                }
                 LabeledContent("Last checked") {
                     if let date = updater.lastChecked {
                         Text(date, format: .dateTime.day().month().year().hour().minute())
@@ -94,8 +99,7 @@ struct SettingsView: View {
                         Text("Never").foregroundStyle(.secondary)
                     }
                 }
-                HStack {
-                    Spacer()
+                ControlRow("Check for updates") {
                     Button("Check Now") { updater.checkForUpdates() }
                         .disabled(!updater.canCheckForUpdates)
                 }

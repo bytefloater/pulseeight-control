@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
 using PulseEight.Core;
 using PulseEightControl.Updates;
 using PulseEightControl.Views;
@@ -49,6 +50,10 @@ public sealed class MainWindow : Window
         Loc.Load(_core.GetStrings(), _snapshot.Language);
         Title = Loc.T("app.title");
         _titleBar.Title = Loc.T("app.title");
+        // The logo in the title bar, and as the window's (taskbar and Alt-Tab) icon.
+        if (AppAssets.Find("AppIcon.ico") is { } icon) AppWindow.SetIcon(icon);
+        if (AppAssets.Find("Logo.png") is { } logo)
+            _titleBar.IconSource = new ImageIconSource { ImageSource = new BitmapImage(new Uri(logo)) { DecodePixelWidth = 32 } };
         // Modern WinUI 3 title bar: the app draws it (so Mica runs right to the top edge) and the
         // system keeps the caption buttons.
         ExtendsContentIntoTitleBar = true;

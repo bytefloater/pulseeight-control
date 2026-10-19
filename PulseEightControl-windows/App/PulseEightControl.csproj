@@ -7,6 +7,8 @@
     <RootNamespace>PulseEightControl</RootNamespace>
     <AssemblyName>PulseEightControl</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- The icon of the .exe: Explorer, the taskbar, shortcuts and the installer's entries. -->
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
     <Platforms>x64;ARM64</Platforms>
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
     <UseWinUI>true</UseWinUI>
@@ -38,6 +40,13 @@
   <ItemGroup Condition="'$(P8UpdateBaseUrl)' != '' And '$(P8UpdatePublicKey)' != ''">
     <AssemblyMetadata Include="UpdateBaseUrl" Value="$(P8UpdateBaseUrl)" />
     <AssemblyMetadata Include="UpdatePublicKey" Value="$(P8UpdatePublicKey)" />
+  </ItemGroup>
+
+  <!-- The logo and the icon, beside the .exe at run time (the window, the title bar and the About page load them from
+       there). The app is unpackaged, so nothing else would put them in the output folder or the installer. -->
+  <ItemGroup>
+    <Content Include="Assets\Logo.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\AppIcon.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

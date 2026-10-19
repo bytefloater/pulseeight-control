@@ -31,6 +31,8 @@ DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 UninstallDisplayName=PulseEight Control
 UninstallDisplayIcon={app}\PulseEightControl.exe
+; The installer's own icon (the app's .exe carries the same one for the shortcuts and Add/Remove Programs).
+SetupIconFile=..\App\Assets\AppIcon.ico
 OutputDir={#OutputDir}
 OutputBaseFilename=PulseEightControl-Setup-{#AppVersion}-{#Arch}
 Compression=lzma2/ultra

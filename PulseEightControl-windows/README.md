@@ -13,6 +13,13 @@ JSON. See `../docs/core-interface.md` and `../docs/localisation.md`.
 | `Updates.Tests` | xUnit tests with a local signed feed and download server; they run on any OS and need no matrix. |
 | `App` (`PulseEightControl`) | The WinUI 3 app. The interface is built in code; the only XAML is `App.xaml`, which WinUI needs to load its control styles. |
 
+## The logo
+
+`App/Assets/Logo.png` (1024 px) is the logo. `App/Assets/AppIcon.ico` is built from it by `App/Assets/make-icon.py` (macOS;
+re-run it and commit the result when the logo changes). The icon is the `.exe`'s (`ApplicationIcon` in the project file: Explorer,
+the taskbar, shortcuts) and the installer's (`SetupIconFile`); both files are also copied beside the `.exe` so the window, the
+title bar and the About page can load them.
+
 ## Build and run
 
 Needs the Swift toolchain and the .NET 8 (or newer) SDK.

@@ -7,7 +7,7 @@ import PulseEightKit
 ///
 /// Commands: route, renamePort, setEdid, setBacklight, setStatusLed, retry, reconnect,
 /// saveSettings, removeAdminPassword, setAppearance, setLanguage, strings, setHighlightGrid,
-/// setShowStatusBar, setCheckForUpdates, validatePortName. See `docs/core-interface.md` for the fields of each.
+/// setShowStatusBar, setCheckForUpdates, validatePortName, discover. See `docs/core-interface.md` for the fields of each.
 extension AppCore {
     public func handle(requestJSON: String) async -> String {
         guard let data = requestJSON.data(using: .utf8),
@@ -64,6 +64,14 @@ extension AppCore {
                 setShowStatusBar(try bool(object, "on"))
             case "setCheckForUpdates":
                 setCheckForUpdates(try bool(object, "on"))
+            case "discover":
+                // The matrix found, as {"host","port"} in "value"; no "value" when none was found.
+                guard let found = try await discoverMatrix() else { return Self.success() }
+                let object: [String: Any] = ["host": found.host, "port": found.port]
+                guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
+                      let text = String(data: data, encoding: .utf8)
+                else { throw CoreError.failed("Couldn't encode the matrix address") }
+                return Self.success(value: text)
             case "validatePortName":
                 return Self.success(value: try validatePortName(try string(object, "name")))
             default:

@@ -28,7 +28,7 @@ Quiet polls (only timestamps changed) do not fire the observer.
 
 ## Commands (`p8_call`)
 
-Request `{"cmd": "...", ...}`; response `{"ok":true}` (plus `"value"` for `validatePortName` and `strings`) or
+Request `{"cmd": "...", ...}`; response `{"ok":true}` (plus `"value"` for `validatePortName`, `strings` and `discover`) or
 `{"ok":false,"error":"message ready to show"}`.
 
 | `cmd` | Fields |
@@ -48,6 +48,7 @@ Request `{"cmd": "...", ...}`; response `{"ok":true}` (plus `"value"` for `valid
 | `setHighlightGrid`, `setShowStatusBar` | `on`: bool |
 | `setCheckForUpdates` | `on`: bool. Whether the app looks for updates by itself. Read by the Windows updater; the macOS app leaves this to Sparkle. |
 | `validatePortName` | `name`; returns the trimmed name in `value` |
+| `discover` | no fields. Asks gotomymatrix.com which matrix is on this network (needs internet). Returns `{"host":"192.168.1.50","port":80}` as text in `value`, or no `value` if it knows of none. Changes no setting: show the answer, then send `saveSettings` if the user accepts it. Only private-network addresses are accepted. |
 
 Admin-gated commands (`renamePort`, `setEdid`, `setBacklight`, `setStatusLed`) fail with a message
 if no admin password is saved.

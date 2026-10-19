@@ -267,6 +267,17 @@ public final class AppCore: @unchecked Sendable {
         if connectionChanged { reconfigureStore() }
     }
 
+    /// Asks Pulse-Eight's discovery service (gotomymatrix.com) which matrix is on this network. nil if it
+    /// knows of none. Doesn't change any setting: the caller decides whether to use the answer.
+    public func discoverMatrix() async throws -> DiscoveredMatrix? {
+        let transport = makeTransport(TimeInterval(settings.matrix.timeout))
+        do {
+            return try await MatrixDiscovery.find(using: transport)
+        } catch {
+            throw CoreError.failed((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+        }
+    }
+
     public func removeAdminPassword() throws {
         do {
             try secrets.setSecret(nil, for: Self.adminAccount)

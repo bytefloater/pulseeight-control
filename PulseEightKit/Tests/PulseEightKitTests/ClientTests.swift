@@ -136,3 +136,27 @@ import Testing
         }
     }
 }
+
+@Suite struct LocalNetworkBlockedTests {
+    /// The error macOS gave when the app had no Local Network permission (shape copied from a real log).
+    func blockedError() -> NSError {
+        let underlying = NSError(domain: "kCFErrorDomainCFNetwork", code: -1009, userInfo: [
+            "_NSURLErrorNWPathKey": "unsatisfied (Local network prohibited), interface: en0[802.11], ipv4, uses wifi",
+        ])
+        return NSError(domain: NSURLErrorDomain, code: -1009, userInfo: [
+            NSLocalizedDescriptionKey: "The Internet connection appears to be offline.", NSUnderlyingErrorKey: underlying,
+        ])
+    }
+
+    @Test func recognisesTheLocalNetworkBlockInTheWrappedError() {
+        #expect(URLSessionTransport.isLocalNetworkBlocked(blockedError()))
+    }
+
+    @Test func aPlainOfflineErrorIsNotMistakenForIt() {
+        let offline = NSError(domain: NSURLErrorDomain, code: -1009, userInfo: [
+            NSUnderlyingErrorKey: NSError(domain: "kCFErrorDomainCFNetwork", code: -1009, userInfo: ["_NSURLErrorNWPathKey": "unsatisfied (No network route)"]),
+        ])
+        #expect(!URLSessionTransport.isLocalNetworkBlocked(offline))
+        #expect(!URLSessionTransport.isLocalNetworkBlocked(NSError(domain: NSURLErrorDomain, code: -1004)))
+    }
+}

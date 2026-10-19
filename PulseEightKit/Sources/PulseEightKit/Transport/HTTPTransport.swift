@@ -45,11 +45,18 @@ public struct TransportError: Error, Sendable, CustomStringConvertible {
     public var isTimeout: Bool
     /// The connection was dropped before a response arrived (worth retrying).
     public var isConnectionDrop: Bool
+    /// macOS refused the connection because the app has no Local Network permission.
+    public var isLocalNetworkBlocked: Bool
 
-    public init(_ description: String, isTimeout: Bool = false, isConnectionDrop: Bool = false) {
+    /// What the app says when macOS blocks it from the local network; the UI looks for this to offer the
+    /// settings button.
+    public static let localNetworkBlockedPhrase = "Local Network"
+
+    public init(_ description: String, isTimeout: Bool = false, isConnectionDrop: Bool = false, isLocalNetworkBlocked: Bool = false) {
         self.description = description
         self.isTimeout = isTimeout
         self.isConnectionDrop = isConnectionDrop
+        self.isLocalNetworkBlocked = isLocalNetworkBlocked
     }
 }
 
@@ -77,8 +84,38 @@ public struct URLSessionTransport: HTTPTransport {
         noRedirectSession = URLSession(configuration: configuration, delegate: RefuseRedirects(), delegateQueue: nil)
     }
 
+    /// The matrix now and then drops a connection before answering, and its idle ones go away, which a reused
+    /// connection then trips over. Every request the app sends is safe to repeat, so a drop is retried (on a
+    /// fresh connection, see `sendOnce`). The Windows transport does the same.
     public func send(_ request: HTTPRequest) async throws -> HTTPResponse {
+        var attempt = 0
+        while true {
+            do {
+                return try await sendOnce(request)
+            } catch let error as TransportError where error.isConnectionDrop && attempt < 2 {
+                attempt += 1
+                Diagnostics.note("Connection dropped on \(request.url.path), retrying (\(attempt)): \(error.description)")
+                try? await Task.sleep(nanoseconds: UInt64(50_000_000 * attempt))
+            }
+        }
+    }
+
+    /// True when the error (or one it wraps) says the network path was refused for want of Local Network
+    /// permission. Foundation gives no API for this: the only trace is the path description in the error's
+    /// user info, which reads "unsatisfied (Local network prohibited)".
+    static func isLocalNetworkBlocked(_ error: NSError) -> Bool {
+        var current: NSError? = error
+        while let error = current {
+            if let path = error.userInfo["_NSURLErrorNWPathKey"], "\(path)".contains("Local network prohibited") { return true }
+            current = error.userInfo[NSUnderlyingErrorKey] as? NSError
+        }
+        return false
+    }
+
+    private func sendOnce(_ request: HTTPRequest) async throws -> HTTPResponse {
         var urlRequest = URLRequest(url: request.url)
+        // A new connection each time: the matrix closes idle ones, and reusing a closed one fails.
+        urlRequest.setValue("close", forHTTPHeaderField: "Connection")
         urlRequest.httpMethod = request.method.rawValue
         if let body = request.jsonBody {
             urlRequest.httpBody = body
@@ -89,8 +126,22 @@ public struct URLSessionTransport: HTTPTransport {
         return try await withCheckedThrowingContinuation { continuation in
             (request.followRedirects ? session : noRedirectSession).dataTask(with: urlRequest) { data, response, error in
                 if let error {
-                    let isTimeout = (error as? URLError)?.code == .timedOut
-                    continuation.resume(throwing: TransportError(error.localizedDescription, isTimeout: isTimeout))
+                    let code = (error as? URLError)?.code
+                    if Self.isLocalNetworkBlocked(error as NSError) {
+                        // macOS reports this as "The Internet connection appears to be offline", which sends
+                        // people to their Wi-Fi when the fix is a switch in Privacy & Security.
+                        continuation.resume(throwing: TransportError(
+                            "macOS is blocking PulseEight Control from the \(TransportError.localNetworkBlockedPhrase). "
+                                + "Allow it in System Settings > Privacy & Security > \(TransportError.localNetworkBlockedPhrase) "
+                                + "(NSURLErrorDomain \((error as NSError).code))",
+                            isLocalNetworkBlocked: true))
+                        return
+                    }
+                    // The code is in the text because "The network connection was lost" and "Could not connect"
+                    // can have several causes, and which one it was is the first thing to know.
+                    let detail = "\(error.localizedDescription) (\((error as NSError).domain) \((error as NSError).code))"
+                    continuation.resume(throwing: TransportError(
+                        detail, isTimeout: code == .timedOut, isConnectionDrop: code == .networkConnectionLost))
                 } else if let http = response as? HTTPURLResponse {
                     continuation.resume(returning: HTTPResponse(
                         status: http.statusCode, body: data ?? Data(),

@@ -107,6 +107,21 @@ public enum StringKey: String, CaseIterable, Sendable {
     case featureVideoScrambling = "feature.videoScrambling"
     case featureUpdateInterval = "feature.updateInterval"
 
+    // MARK: Health
+    case healthUptime = "health.uptime"
+    case healthTemperature = "health.temperature"
+    case healthPowerSupply = "health.powerSupply"
+    case healthInputModules = "health.inputModules"
+    case healthOutputModules = "health.outputModules"
+    case healthUpdateState = "health.updateState"
+    case healthRail = "health.rail"
+    case healthRailOutOfRange = "health.railOutOfRange"
+    case healthDegrees = "health.degrees"
+    case healthVolts = "health.volts"
+    case durationDays = "duration.days"
+    case durationHours = "duration.hours"
+    case durationMinutes = "duration.minutes"
+
     // MARK: Intervals
     case intervalSeconds = "interval.seconds"
     case intervalMinutes = "interval.minutes"
@@ -205,6 +220,7 @@ public enum StringKey: String, CaseIterable, Sendable {
     case errorNameEmpty = "error.nameEmpty"
     case errorNameTooLong = "error.nameTooLong"
     case errorHostRequired = "error.hostRequired"
+    case errorMatrixMissing = "error.matrixMissing"
     case errorPortRange = "error.portRange"
     case errorTimeoutMin = "error.timeoutMin"
     case errorPollMin = "error.pollMin"

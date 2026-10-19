@@ -31,6 +31,13 @@ public enum DeviceCapture {
         record("system-details.json", try await client.rawResponse("/System/Details"))
         record("system-features.json", try await client.rawResponse("/system/features"))
 
+        // Not every firmware has it, so a refusal is noted, not fatal.
+        do {
+            record("system-health.json", try await client.rawResponse("/System/Health"))
+        } catch {
+            skipped.append("System/Health: \(error.localizedDescription)")
+        }
+
         let listData = try await client.rawResponse("/Port/List")
         record("port-list.json", listData)
         let ports: [MatrixPort]

@@ -7,10 +7,57 @@ public enum Appearance: String, Codable, CaseIterable, Sendable, CustomStringCon
     public var description: String { rawValue.capitalized }
 }
 
-/// Everything persisted in settings.json. `matrix` uses the same keys as the old
-/// legacy/PulseEightWeb/backend/config.json, minus `admin_password`.
+/// One matrix the app can connect to: its own address, timings and (in the secret store, under
+/// `AppCore.adminAccount(for:)`) admin password, plus a name to tell it apart.
+public struct MatrixProfile: Codable, Equatable, Sendable, Identifiable {
+    public var id: UUID
+    /// What the person calls it. May be empty, in which case `displayName` is its address.
+    public var name: String
+    public var config: MatrixConfig
+
+    public init(id: UUID = UUID(), name: String = "", config: MatrixConfig = MatrixConfig()) {
+        self.id = id
+        self.name = name
+        self.config = config
+    }
+
+    /// The name, or the address when there is no name.
+    public var displayName: String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? address : trimmed
+    }
+
+    /// Host, plus the port when it isn't 80. "Matrix" before there is a host.
+    public var address: String {
+        guard let host = config.host, !host.isEmpty else { return "Matrix" }
+        return config.port == 80 ? host : "\(host):\(config.port)"
+    }
+
+    enum CodingKeys: String, CodingKey { case id, name }
+
+    /// The connection fields sit beside `id` and `name` (not under a key of their own), with the keys
+    /// `MatrixConfig` has always used, so a profile reads like the single matrix the file used to hold.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = ((try? c.decodeIfPresent(UUID.self, forKey: .id)) ?? nil) ?? UUID()
+        name = ((try? c.decodeIfPresent(String.self, forKey: .name)) ?? nil) ?? ""
+        config = try MatrixConfig(from: decoder)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try config.encode(to: encoder)
+    }
+}
+
+/// Everything persisted in settings.json.
 public struct AppSettings: Codable, Equatable, Sendable {
-    public var matrix = MatrixConfig()
+    /// Every matrix that has been added, in the order they were added.
+    public var matrices: [MatrixProfile] = []
+    /// The one being shown. When it names nothing (or nil) the first matrix is the selected one.
+    public var selectedMatrixID: UUID?
     public var appearance: Appearance = .system
     /// Row/column highlight under the pointer in the routing grid.
     public var highlightGrid = true
@@ -23,18 +70,43 @@ public struct AppSettings: Codable, Equatable, Sendable {
 
     public init() {}
 
-    /// Spelled out (rather than synthesized) so the decoding below can name it. The names are the property
-    /// names, exactly what the synthesized keys were, so existing settings files keep loading.
+    public var selectedMatrix: MatrixProfile? {
+        matrices.first { $0.id == selectedMatrixID } ?? matrices.first
+    }
+
+    /// The selected matrix's connection settings (defaults when there is none). Setting it changes the
+    /// selected matrix, or adds one when there is none yet.
+    public var matrix: MatrixConfig {
+        get { selectedMatrix?.config ?? MatrixConfig() }
+        set {
+            if let index = matrices.firstIndex(where: { $0.id == selectedMatrix?.id }) {
+                matrices[index].config = newValue
+            } else {
+                let profile = MatrixProfile(config: newValue)
+                matrices = [profile]
+                selectedMatrixID = profile.id
+            }
+        }
+    }
+
+    /// The property names, except `matrix`: the single matrix older versions kept there is read (see
+    /// `init(from:)`) but no longer written.
     enum CodingKeys: String, CodingKey {
-        case matrix, appearance, highlightGrid, showStatusBar, language, checkForUpdates
+        case matrices, selectedMatrix, matrix, appearance, highlightGrid, showStatusBar, language, checkForUpdates
     }
 
     /// Each field decodes on its own: a value this version doesn't understand (a newer version's new
     /// appearance, a hand-edited setting of the wrong type) falls back to that field's default instead of
-    /// discarding the whole file, which would lose the matrix's host.
+    /// discarding the whole file, which would lose the matrices' hosts.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        matrix = Self.lenient(c, .matrix) ?? MatrixConfig()
+        if let list: [Lossy<MatrixProfile>] = Self.lenient(c, .matrices) {
+            matrices = list.compactMap(\.value)
+        } else if let old: MatrixConfig = Self.lenient(c, .matrix), old.host?.isEmpty == false {
+            // A file from before there could be several: its one matrix becomes the first.
+            matrices = [MatrixProfile(name: old.host ?? "", config: old)]
+        }
+        selectedMatrixID = Self.lenient(c, .selectedMatrix) ?? matrices.first?.id
         appearance = Self.lenient(c, .appearance) ?? .system
         highlightGrid = Self.lenient(c, .highlightGrid) ?? true
         showStatusBar = Self.lenient(c, .showStatusBar) ?? true
@@ -42,8 +114,28 @@ public struct AppSettings: Codable, Equatable, Sendable {
         checkForUpdates = Self.lenient(c, .checkForUpdates) ?? true
     }
 
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(matrices, forKey: .matrices)
+        try c.encodeIfPresent(selectedMatrix?.id, forKey: .selectedMatrix)
+        try c.encode(appearance, forKey: .appearance)
+        try c.encode(highlightGrid, forKey: .highlightGrid)
+        try c.encode(showStatusBar, forKey: .showStatusBar)
+        try c.encode(language, forKey: .language)
+        try c.encode(checkForUpdates, forKey: .checkForUpdates)
+    }
+
     private static func lenient<T: Decodable>(_ container: KeyedDecodingContainer<CodingKeys>, _ key: CodingKeys) -> T? {
         (try? container.decodeIfPresent(T.self, forKey: key)) ?? nil
+    }
+
+    /// Whether a settings file holds the single matrix of older versions, which `AppCore` then rewrites in
+    /// the current form and moves the admin password along with.
+    static func isLegacyFile(at url: URL) -> Bool {
+        guard let data = try? Data(contentsOf: url),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return false }
+        return object["matrices"] == nil && object["matrix"] != nil
     }
 
     /// Missing or unreadable files give defaults.
@@ -60,6 +152,12 @@ public struct AppSettings: Codable, Equatable, Sendable {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try encoder.encode(self).write(to: url, options: .atomic)
     }
+}
+
+/// An array element that decodes to nil instead of failing, so one bad entry doesn't take the list with it.
+private struct Lossy<T: Decodable>: Decodable {
+    var value: T?
+    init(from decoder: Decoder) throws { value = try? T(from: decoder) }
 }
 
 /// Per-OS location for settings. The admin password is not stored here (see `SecretStore`).

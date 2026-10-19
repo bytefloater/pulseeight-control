@@ -53,6 +53,81 @@ import Testing
         #expect(details.revision.ir == 3)
     }
 
+    /// What a real NeoMatrix (firmware 3.10.6) sends: lower-case `revision`, snake_case `hdbt_upgrade` and
+    /// `mx_remote`, and `IR`, `ARC` and `DSP`. Decoding these as the vendor library's spellings failed, so
+    /// none of the system information loaded.
+    @Test func decodesTheSpellingsARealMatrixSends() throws {
+        let details = try decode(
+            #"{"Result":true,"Model":"FF88A","Version":"3.10.6-1","Serial":"S","MAC":"m","VID":"P8","BoardRev":1,"revision":{"main":1,"top":7,"ir":0},"Locale":"EN_UK","StatusMessage":"Healthy","Status":0}"#,
+            as: SystemDetails.self)
+        #expect(details.model == "FF88A")
+        #expect(details.version == "3.10.6-1")
+        #expect(details.revision == Revision(main: 1, top: 7, ir: 0))
+        #expect(details.statusMessage == "Healthy")
+
+        let features = try decode(
+            #"{"UpdInterval":3600000,"CEC":true,"CEC_Switching":true,"CEC_Logging":0,"CEC_Usage":58,"PDU":false,"Sky":false,"HDBaseT":true,"hdbt_upgrade":false,"mx_remote":true,"Video":{"Scrambling":false,"IR":{"Learn":true},"Input":{"Bays":8},"Output":{"Bays":10}},"Audio":{"ARC":{"support":false},"Routing":false,"DSP":false,"Input":{"Bays":0},"Output":{"Bays":0}},"BacklightLED":"high","StatusLED":"on","Result":true}"#,
+            as: SystemFeatures.self)
+        #expect(features.mxRemote)
+        #expect(!features.hdbtUpgrade)
+        #expect(features.hdbaset)
+        #expect(features.video.ir?["Learn"] == .bool(true))
+        #expect(features.video.output["Bays"]?.intValue == 10)
+        #expect(features.audio.arc?["support"] == .bool(false))
+        #expect(features.audio.dsp == false)
+        #expect(features.backlight == .high)
+        #expect(features.statusLEDOn == true)
+    }
+
+    @Test func systemDetailsOnlyNeedAModel() throws {
+        let details = try decode(#"{"Model":"X"}"#, as: SystemDetails.self)
+        #expect(details.model == "X")
+        #expect(details.revision == Revision())
+        #expect(details.statusMessage == "")
+        #expect(throws: DecodingError.self) { try decode(#"{"Version":"1"}"#, as: SystemDetails.self) }
+    }
+
+    @Test func aWronglyTypedFieldFallsBackInsteadOfHidingTheRest() throws {
+        let features = try decode(#"{"UpdInterval":"soon","CEC_Usage":58,"Video":"nonsense","BacklightLED":"low"}"#, as: SystemFeatures.self)
+        #expect(features.updInterval == 0)
+        #expect(features.cecUsage == 58)
+        #expect(features.video == VideoFeatures())
+        #expect(features.backlight == .low)
+    }
+
+    @Test func decodesTheHealthReportOfARealMatrix() throws {
+        let health = try decode(Fixtures.systemHealth, as: SystemHealth.self)
+        #expect(health.status == 0)
+        #expect(health.statusMessage == "Healthy")
+        #expect(health.rails.map(\.name) == ["3.3V", "12V", "1V top"])
+        #expect(health.rails[1].volts == 12.256533)
+        #expect(health.rails.allSatisfy { $0.ok })
+        #expect(health.temperatures == [32, 31, 36])
+        #expect(health.updateState == 6)
+        #expect(health.uptime == 899)
+        #expect(health.components == [
+            HealthComponent(kind: .powerSupply(1), status: 0, message: "Present & Healthy"),
+            HealthComponent(kind: .inputModules, status: 0, message: "All Present & Healthy"),
+            HealthComponent(kind: .outputModules, status: 0, message: "All Present & Healthy"),
+        ])
+    }
+
+    @Test func healthCopesWithWhateverTheFirmwareReports() throws {
+        // Two supplies (one faulty), sensors out of order, and nothing else.
+        let health = try decode(
+            #"{"Temperature10":50,"Temperature2":30,"PSU2":3,"PSU2Message":"Not present","PSU1":0,"PSU1Message":"OK","Status":1,"StatusMessage":"Fault","psu":[{"name":"5V","ok":false,"value":4.1}]}"#,
+            as: SystemHealth.self)
+        #expect(health.temperatures == [30, 50], "sensors are ordered by number, not by how they were sent")
+        #expect(health.components.map(\.kind) == [.powerSupply(1), .powerSupply(2)])
+        #expect(health.components.map(\.isHealthy) == [true, false])
+        #expect(health.rails == [PowerRail(name: "5V", ok: false, volts: 4.1)])
+        #expect(health.status == 1)
+        #expect(health.uptime == nil && health.updateState == nil)
+
+        let empty = try decode("{}", as: SystemHealth.self)
+        #expect(empty.rails.isEmpty && empty.temperatures.isEmpty && empty.components.isEmpty)
+    }
+
     @Test func decodesInputDetails() throws {
         let details = try decode(Fixtures.inputDetails, as: InputPortDetails.self)
         #expect(details.base.hasSignal == true)

@@ -37,6 +37,11 @@ import Testing
             _ = try decoder.decode(SystemDetails.self, from: data)
         case "system-features":
             _ = try decoder.decode(SystemFeatures.self, from: data)
+        case "system-health":
+            let health = try decoder.decode(SystemHealth.self, from: data)
+            #expect(!health.rails.isEmpty)
+            #expect(!health.temperatures.isEmpty)
+            #expect(health.uptime != nil)
         case "port-list":
             let list = try decoder.decode(PortListResponse.self, from: data)
             #expect(!list.ports.isEmpty)

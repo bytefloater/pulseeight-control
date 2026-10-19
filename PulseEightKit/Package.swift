@@ -17,7 +17,7 @@ let package = Package(
         .target(name: "PulseEightKit"),
         .target(name: "PulseEightCore", dependencies: ["PulseEightKit"]),
         .target(name: "PulseEightCoreExports", dependencies: ["PulseEightCore"]),
-        .executableTarget(name: "p8ctl", dependencies: ["PulseEightKit"]),
+        .executableTarget(name: "p8ctl", dependencies: ["PulseEightKit", "PulseEightCore"]),
         .testTarget(
             name: "PulseEightKitTests",
             dependencies: ["PulseEightKit"],

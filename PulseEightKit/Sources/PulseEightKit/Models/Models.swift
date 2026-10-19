@@ -81,11 +81,22 @@ public struct Revision: Decodable, Sendable, Equatable {
     public var top: Int
     public var ir: Int
 
-    enum CodingKeys: String, CodingKey { case main = "Main", top = "Top", ir = "Ir" }
+    public init(main: Int = 0, top: Int = 0, ir: Int = 0) {
+        self.main = main
+        self.top = top
+        self.ir = ir
+    }
+
+    public init(from decoder: Decoder) throws {
+        let object = try LooseObject(decoder)
+        main = object.value("main", default: 0)
+        top = object.value("top", default: 0)
+        ir = object.value("ir", default: 0)
+    }
 }
 
 public struct SystemDetails: Decodable, Sendable, Equatable {
-    @LenientBool public var result: Bool
+    public var result: Bool
     public var model: String
     public var version: String
     public var serial: String
@@ -97,33 +108,92 @@ public struct SystemDetails: Decodable, Sendable, Equatable {
     public var statusMessage: String
     public var status: Int
 
-    enum CodingKeys: String, CodingKey {
-        case result = "Result", model = "Model", version = "Version", serial = "Serial"
-        case mac = "MAC", vid = "VID", boardRev = "BoardRev", revision = "Revision"
-        case locale = "Locale", statusMessage = "StatusMessage", status = "Status"
+    public init(
+        result: Bool = true, model: String, version: String, serial: String = "", mac: String = "", vid: String = "",
+        boardRev: Int = 0, revision: Revision = Revision(), locale: String = "", statusMessage: String = "", status: Int = 0
+    ) {
+        self.result = result
+        self.model = model
+        self.version = version
+        self.serial = serial
+        self.mac = mac
+        self.vid = vid
+        self.boardRev = boardRev
+        self.revision = revision
+        self.locale = locale
+        self.statusMessage = statusMessage
+        self.status = status
+    }
+
+    /// Fields are found by name whatever their case (see `LooseObject`). Only a model is required: without
+    /// one this isn't a system details reply at all.
+    public init(from decoder: Decoder) throws {
+        let object = try LooseObject(decoder)
+        guard let model: String = object.value("model") else {
+            throw DecodingError.keyNotFound(
+                LooseKey(stringValue: "Model")!, .init(codingPath: decoder.codingPath, debugDescription: "No Model in the system details"))
+        }
+        self.model = model
+        result = object.bool("result", default: true)
+        version = object.value("version", default: "")
+        serial = object.value("serial", default: "")
+        mac = object.value("mac", default: "")
+        vid = object.value("vid", default: "")
+        boardRev = object.value("boardRev", default: 0)
+        revision = object.value("revision", default: Revision())
+        locale = object.value("locale", default: "")
+        statusMessage = object.value("statusMessage", default: "")
+        status = object.value("status", default: 0)
     }
 }
 
 public struct VideoFeatures: Decodable, Sendable, Equatable {
-    @LenientBool public var scrambling: Bool
+    public var scrambling: Bool
     public var ir: [String: JSONValue]?
     public var input: [String: JSONValue]
     public var output: [String: JSONValue]
 
-    enum CodingKeys: String, CodingKey {
-        case scrambling = "Scrambling", ir = "Ir", input = "Input", output = "Output"
+    public init(scrambling: Bool = false, ir: [String: JSONValue]? = nil, input: [String: JSONValue] = [:], output: [String: JSONValue] = [:]) {
+        self.scrambling = scrambling
+        self.ir = ir
+        self.input = input
+        self.output = output
+    }
+
+    public init(from decoder: Decoder) throws {
+        let object = try LooseObject(decoder)
+        scrambling = object.bool("scrambling", default: false)
+        ir = object.value("ir")
+        input = object.value("input", default: [:])
+        output = object.value("output", default: [:])
     }
 }
 
 public struct AudioFeatures: Decodable, Sendable, Equatable {
     public var arc: [String: JSONValue]?
-    @LenientBool public var routing: Bool
-    @LenientOptionalBool public var dsp: Bool?
+    public var routing: Bool
+    public var dsp: Bool?
     public var input: [String: JSONValue]
     public var output: [String: JSONValue]
 
-    enum CodingKeys: String, CodingKey {
-        case arc = "Arc", routing = "Routing", dsp = "Dsp", input = "Input", output = "Output"
+    public init(
+        arc: [String: JSONValue]? = nil, routing: Bool = false, dsp: Bool? = nil,
+        input: [String: JSONValue] = [:], output: [String: JSONValue] = [:]
+    ) {
+        self.arc = arc
+        self.routing = routing
+        self.dsp = dsp
+        self.input = input
+        self.output = output
+    }
+
+    public init(from decoder: Decoder) throws {
+        let object = try LooseObject(decoder)
+        arc = object.value("arc")
+        routing = object.bool("routing", default: false)
+        dsp = object.bool("dsp")
+        input = object.value("input", default: [:])
+        output = object.value("output", default: [:])
     }
 }
 
@@ -132,28 +202,42 @@ public enum BacklightLevel: String, Sendable, CaseIterable {
 }
 
 public struct SystemFeatures: Decodable, Sendable, Equatable {
-    @LenientBool public var result: Bool
+    public var result: Bool
     public var updInterval: Int
-    @LenientOptionalBool public var cec: Bool?
-    @LenientBool public var cecSwitching: Bool
+    public var cec: Bool?
+    public var cecSwitching: Bool
     public var cecLogging: Int
     public var cecUsage: Int
-    @LenientBool public var pdu: Bool
-    @LenientBool public var sky: Bool
-    @LenientBool public var hdbaset: Bool
-    @LenientBool public var hdbtUpgrade: Bool
-    @LenientBool public var mxRemote: Bool
+    public var pdu: Bool
+    public var sky: Bool
+    public var hdbaset: Bool
+    public var hdbtUpgrade: Bool
+    public var mxRemote: Bool
     public var video: VideoFeatures
     public var audio: AudioFeatures
     /// Raw device value, e.g. "High". Use `backlight` for the typed form.
     public var backlightLED: String?
     public var statusLED: String?
 
-    enum CodingKeys: String, CodingKey {
-        case result = "Result", updInterval = "UpdInterval", cec = "CEC"
-        case cecSwitching = "CEC_Switching", cecLogging = "CEC_Logging", cecUsage = "CEC_Usage"
-        case pdu = "PDU", sky = "Sky", hdbaset = "HDBaseT", hdbtUpgrade = "HdbtUpgrade", mxRemote = "MxRemote"
-        case video = "Video", audio = "Audio", backlightLED = "BacklightLED", statusLED = "StatusLED"
+    /// Fields are found by name whatever their case or underscores (see `LooseObject`): the vendor library
+    /// says `HdbtUpgrade` and `MxRemote`, a real matrix sends `hdbt_upgrade` and `mx_remote`.
+    public init(from decoder: Decoder) throws {
+        let object = try LooseObject(decoder)
+        result = object.bool("result", default: true)
+        updInterval = object.value("updInterval", default: 0)
+        cec = object.bool("cec")
+        cecSwitching = object.bool("cecSwitching", default: false)
+        cecLogging = object.value("cecLogging", default: 0)
+        cecUsage = object.value("cecUsage", default: 0)
+        pdu = object.bool("pdu", default: false)
+        sky = object.bool("sky", default: false)
+        hdbaset = object.bool("hdbaset", default: false)
+        hdbtUpgrade = object.bool("hdbtUpgrade", default: false)
+        mxRemote = object.bool("mxRemote", default: false)
+        video = object.value("video", default: VideoFeatures())
+        audio = object.value("audio", default: AudioFeatures())
+        backlightLED = object.value("backlightLED")
+        statusLED = object.value("statusLED")
     }
 
     public var backlight: BacklightLevel? {
@@ -174,6 +258,122 @@ public struct SystemInfo: Sendable, Equatable {
     public init(details: SystemDetails, features: SystemFeatures) {
         self.details = details
         self.features = features
+    }
+}
+
+// MARK: - Health
+
+/// One of the matrix's supply rails, with the voltage it measured.
+public struct PowerRail: Decodable, Sendable, Equatable {
+    public var name: String
+    /// Whether the matrix considers the rail within range.
+    public var ok: Bool
+    /// Volts. 0 for a rail that isn't fitted or isn't used on this model.
+    public var volts: Double
+
+    public init(name: String, ok: Bool = true, volts: Double = 0) {
+        self.name = name
+        self.ok = ok
+        self.volts = volts
+    }
+
+    public init(from decoder: Decoder) throws {
+        let object = try LooseObject(decoder)
+        name = object.value("name", default: "")
+        ok = object.bool("ok", default: true)
+        volts = object.value("value", default: 0)
+    }
+}
+
+/// A part of the matrix that reports on itself: a power supply, or the set of input or output modules.
+public struct HealthComponent: Sendable, Equatable {
+    public enum Kind: Sendable, Equatable {
+        /// Power supply number 1, 2, ...
+        case powerSupply(Int)
+        case inputModules
+        case outputModules
+    }
+
+    public var kind: Kind
+    /// 0 is healthy; anything else is the matrix's own fault code.
+    public var status: Int
+    /// What the matrix says, e.g. "All Present & Healthy".
+    public var message: String
+
+    public init(kind: Kind, status: Int, message: String) {
+        self.kind = kind
+        self.status = status
+        self.message = message
+    }
+
+    public var isHealthy: Bool { status == 0 }
+}
+
+/// `/System/Health`: the matrix's own view of how it is doing. Everything is optional, because firmware
+/// differs in what it reports (a unit with one power supply has no `PSU2`).
+public struct SystemHealth: Decodable, Sendable, Equatable {
+    public var result: Bool
+    /// 0 is healthy.
+    public var status: Int
+    public var statusMessage: String
+    public var rails: [PowerRail]
+    /// Degrees Celsius, from sensor 0 up, in the order the matrix numbers them.
+    public var temperatures: [Double]
+    public var components: [HealthComponent]
+    /// The matrix's firmware update state code. Its meaning isn't documented, so it is shown as is.
+    public var updateState: Int?
+    /// Seconds since the matrix started.
+    public var uptime: Int?
+
+    public init(
+        result: Bool = true, status: Int = 0, statusMessage: String = "", rails: [PowerRail] = [],
+        temperatures: [Double] = [], components: [HealthComponent] = [], updateState: Int? = nil, uptime: Int? = nil
+    ) {
+        self.result = result
+        self.status = status
+        self.statusMessage = statusMessage
+        self.rails = rails
+        self.temperatures = temperatures
+        self.components = components
+        self.updateState = updateState
+        self.uptime = uptime
+    }
+
+    public init(from decoder: Decoder) throws {
+        let object = try LooseObject(decoder)
+        result = object.bool("result", default: true)
+        status = object.value("status", default: 0)
+        statusMessage = object.value("statusMessage", default: "")
+        rails = object.value("psu", default: [PowerRail]())
+        updateState = object.value("sysUpdState")
+        uptime = object.value("uptime")
+
+        // Sensors and power supplies are numbered in their key names (`Temperature3`, `PSU1`).
+        func numbered(_ prefix: String) -> [(number: Int, key: String)] {
+            object.keys.compactMap { key in
+                let lower = key.lowercased()
+                guard lower.hasPrefix(prefix), let number = Int(lower.dropFirst(prefix.count)) else { return nil }
+                return (number, key)
+            }.sorted { $0.number < $1.number }
+        }
+        temperatures = numbered("temperature").compactMap { object.value($0.key, as: Double.self) }
+
+        var parts = numbered("psu").map { supply in
+            HealthComponent(
+                kind: .powerSupply(supply.number), status: object.value(supply.key, default: 0),
+                message: object.value("PSU\(supply.number)Message", default: ""))
+        }
+        if object.has("inputModules") {
+            parts.append(HealthComponent(
+                kind: .inputModules, status: object.value("inputModules", default: 0),
+                message: object.value("inputModulesMessage", default: "")))
+        }
+        if object.has("outputModules") {
+            parts.append(HealthComponent(
+                kind: .outputModules, status: object.value("outputModules", default: 0),
+                message: object.value("outputModulesMessage", default: "")))
+        }
+        components = parts
     }
 }
 

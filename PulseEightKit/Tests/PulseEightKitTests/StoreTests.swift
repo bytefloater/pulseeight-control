@@ -35,7 +35,7 @@ import Testing
     @Test func pollingPopulatesPortsDetailsSystemAndUpdates() async throws {
         let (store, _, _, recorder) = makeStore()
         await store.start()
-        let state = await recorder.wait { !$0.inputDetails.isEmpty && !$0.outputDetails.isEmpty && $0.system != nil }
+        let state = await recorder.wait { !$0.inputDetails.isEmpty && !$0.outputDetails.isEmpty && $0.system != nil && $0.health != nil }
         await store.stop()
 
         let loaded = try #require(state)
@@ -45,9 +45,109 @@ import Testing
         #expect(loaded.status.connected)
         #expect(loaded.adminConfigured)
         #expect(loaded.system?.features.backlight == .high)
+        #expect(loaded.health?.statusMessage == "Healthy")
         // The fixture reports a firmware update for every output.
         #expect(loaded.updates.map(\.bay) == [0, 1])
         #expect(loaded.updates.first?.name == "Lounge TV")
+    }
+
+    @Test func aMatrixWithoutAHealthPageStillLoadsEverythingElse() async throws {
+        let device = MockTransport.device()
+        let transport = MockTransport { request in
+            request.url.path == "/System/Health" ? MockTransport.reply("", status: 404) : device.handlerResponse(for: request)
+        }
+        let (store, _, _, recorder) = makeStore(transport: transport)
+        await store.start()
+        let state = await recorder.wait { !$0.inputDetails.isEmpty && $0.system != nil }
+        await store.stop()
+
+        #expect(state?.health == nil)
+        #expect(state?.systemError == nil)
+        #expect(state?.status.connected == true)
+    }
+
+    /// Makes a store whose transport factory is counted, so a test can see connections being made again.
+    func makeCountingStore(
+        config: MatrixConfig, transport: MockTransport, recorder: StateRecorder
+    ) -> (MatrixStore, AttemptCounter) {
+        let transports = AttemptCounter()
+        let store = MatrixStore(
+            config: config, adminPassword: "secret",
+            makeTransport: { _ in _ = transports.next(); return transport },
+            onChange: { recorder.record($0) })
+        return (store, transports)
+    }
+
+    @Test func aConnectionThatKeepsFailingIsMadeAgainAndRecovers() async throws {
+        let device = MockTransport.device()
+        let transport = MockTransport { _ in .failure(TransportError("connection lost")) }
+        let recorder = StateRecorder()
+        let (store, transports) = makeCountingStore(
+            config: MatrixConfig(host: "10.0.0.5", pollInterval: 1, detailPollInterval: 60), transport: transport, recorder: recorder)
+        await store.start()
+        #expect(transports.value == 1)
+
+        // Two failed polls (1s apart) and the connection is thrown away and made again.
+        let rebuilt = await recorder.wait(timeout: 6) { _ in transports.value >= 2 }
+        #expect(rebuilt != nil)
+
+        transport.setHandler { device.handlerResponse(for: $0) }
+        let state = await recorder.wait(timeout: 6) { $0.status.connected && $0.system != nil }
+        await store.stop()
+        #expect(state != nil, "polling goes on after the rebuild and recovers once the matrix answers")
+    }
+
+    @Test func retryingMakesTheConnectionAgainAndLoadsWhatNeverLoaded() async throws {
+        let device = MockTransport.device()
+        let transport = MockTransport { request in
+            request.url.path == "/System/Details" ? .failure(TransportError("dropped")) : device.handlerResponse(for: request)
+        }
+        let recorder = StateRecorder()
+        let (store, transports) = makeCountingStore(
+            config: MatrixConfig(host: "10.0.0.5", pollInterval: 60, detailPollInterval: 60), transport: transport, recorder: recorder)
+        await store.start()
+        let failed = await recorder.wait { $0.status.connected && $0.systemError != nil }
+        #expect(failed?.system == nil)
+
+        // The matrix is fine again; "Retry now" must bring the details back without waiting out the poll interval.
+        transport.setHandler { device.handlerResponse(for: $0) }
+        try await store.reconnect()
+        let state = await store.state
+        await store.stop()
+
+        #expect(state.system != nil)
+        #expect(state.systemError == nil)
+        #expect(transports.value == 2, "retrying starts from a fresh connection")
+    }
+
+    /// A system details failure used to leave them empty for a minute and say nothing about why.
+    @Test func aFailedSystemFetchIsReportedAndRetriedUntilItWorks() async throws {
+        let device = MockTransport.device()
+        let healed = HealedFlag()
+        let attempts = AttemptCounter()
+        let transport = MockTransport { request in
+            if request.url.path == "/System/Details" {
+                _ = attempts.next()
+                if !healed.value { return MockTransport.reply("{}", status: 500) }
+            }
+            return device.handlerResponse(for: request)
+        }
+        let (store, _, _, recorder) = makeStore(
+            config: MatrixConfig(host: "10.0.0.5", pollInterval: 1, detailPollInterval: 1), transport: transport)
+        await store.start()
+
+        let failed = await recorder.wait { $0.systemError != nil }
+        #expect(failed?.system == nil)
+        #expect(failed?.systemError?.contains("500") == true)
+        #expect(failed?.status.connected == true, "the routing works while the system details don't")
+
+        let tried = await recorder.wait { _ in attempts.value >= 2 }
+        #expect(tried != nil, "it is asked for again, not given up on")
+
+        healed.set()
+        let recovered = await recorder.wait { $0.system != nil }
+        await store.stop()
+        #expect(recovered?.systemError == nil)
     }
 
     @Test func connectionGoesStaleAfterThreePollsOrFifteenSeconds() async throws {
@@ -241,4 +341,19 @@ import Testing
         #expect(state.ports.isEmpty)
         #expect(!state.status.connected)
     }
+}
+
+/// Counts calls from a closure that has to be Sendable.
+final class AttemptCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    var value: Int { lock.lock(); defer { lock.unlock() }; return count }
+    func next() -> Int { lock.lock(); defer { lock.unlock() }; count += 1; return count }
+}
+
+final class HealedFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var flag = false
+    var value: Bool { lock.lock(); defer { lock.unlock() }; return flag }
+    func set() { lock.lock(); flag = true; lock.unlock() }
 }

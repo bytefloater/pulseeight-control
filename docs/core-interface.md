@@ -28,7 +28,7 @@ Quiet polls (only timestamps changed) do not fire the observer.
 
 ## Commands (`p8_call`)
 
-Request `{"cmd": "...", ...}`; response `{"ok":true}` (plus `"value"` for `validatePortName`, `strings` and `discover`) or
+Request `{"cmd": "...", ...}`; response `{"ok":true}` (plus `"value"` for `validatePortName`, `strings`, `discover` and `saveMatrix`) or
 `{"ok":false,"error":"message ready to show"}`.
 
 | `cmd` | Fields |
@@ -40,8 +40,11 @@ Request `{"cmd": "...", ...}`; response `{"ok":true}` (plus `"value"` for `valid
 | `setStatusLed` | `on`: bool |
 | `retry` | poll now |
 | `reconnect` | drop the connection and reconnect from saved settings |
-| `saveSettings` | `host`, `port`, `timeout`, `pollInterval`, `detailPollInterval` (strings or numbers), optional `adminPassword` (empty keeps the saved one) |
-| `removeAdminPassword` | |
+| `saveMatrix` | Adds a matrix, or changes the one named by `id`. Fields: optional `id`, `name` (blank shows the address), `host`, `port`, `timeout`, `pollInterval`, `detailPollInterval` (strings or numbers), optional `adminPassword` (empty keeps the saved one), optional `clearAdminPassword`: bool. Returns the matrix's id in `value`. The first matrix added becomes the selected one; later ones don't. Reconnects if the selected matrix's connection changed. |
+| `selectMatrix` | `id`: the matrix to show. Stops talking to the current one and connects to this one. |
+| `removeMatrix` | `id`. Also forgets its admin password. If it was selected, the first remaining matrix is. |
+| `saveSettings` | The single-matrix form, kept for older callers: saves the **selected** matrix (adding one if there is none), keeping its name. Same fields as `saveMatrix` minus `id`, `name` and `clearAdminPassword`. |
+| `removeAdminPassword` | Forgets the selected matrix's admin password. |
 | `setAppearance` | `value`: `system`, `light`, `dark` |
 | `setLanguage` | `value`: a code from the snapshot's `languages`, or `system` |
 | `strings` | returns the whole text table for the language in force, a JSON object in `value` (see [localisation](localisation.md)) |
@@ -58,10 +61,12 @@ if no admin password is saved.
 `schema` is `1`. Bays are zero-based (`bay`), display numbers one-based (`number`).
 
 ```
-schema, phase, phaseDetail?, summary, hostLabel, adminConfigured,
+schema, phase, phaseDetail?, summary, hostLabel (the selected matrix's name, or its address when it has none), adminConfigured (for the selected matrix),
 language ("en": the language in force), languages [ {code, name} ] (name is in that language),
 settings { appearance, highlightGrid, showStatusBar, checkForUpdates, language ("system" or a code), host?, port, timeout,
-           pollInterval, detailPollInterval },
+           pollInterval, detailPollInterval }   (host onwards: the selected matrix),
+matrices [ {id, name, displayName, host?, port, timeout, pollInterval, detailPollInterval, adminPasswordSaved, selected} ]
+           (every configured matrix, in the order added; the admin password itself is never included),
 inputs[], outputs[]  -> port {
     mode, bay, number, name, type,
     status (0 ok, 1 module fault, 2 warning, 3 no signal, 4 not present), statusLabel,
@@ -69,7 +74,10 @@ inputs[], outputs[]  -> port {
     updateAvailable, edidProfile? (inputs)
     details [ {label, value} ]    (empty until the matrix details load)
 },
-systemRows[], featureRows[]   -> [ {label, value} ]  (identical text on both platforms)
+systemRows[], healthRows[], featureRows[]   -> [ {label, value} ]  (identical text on both platforms; healthRows is the matrix's
+                                  own health report: status, uptime, power supplies and modules, temperatures, supply rails; empty
+                                  until it loads and for firmware that has none)
+systemError?                  -> why the system details couldn't be loaded (they are missing while this is set)
 model?, firmware?,
 frontPanel? { backlight? ("off"|"low"|"high"), statusLed? },
 updates [ {bay, name, firmwareVersion?} ],

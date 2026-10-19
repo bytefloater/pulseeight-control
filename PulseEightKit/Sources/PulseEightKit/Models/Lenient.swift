@@ -92,3 +92,70 @@ public enum JSONValue: Decodable, Sendable, Equatable {
         return nil
     }
 }
+
+// MARK: - Keys that differ between firmware versions
+
+/// A coding key made of whatever the device sent, so a struct can look its fields up by name without
+/// caring how the firmware spelled them.
+struct LooseKey: CodingKey {
+    var stringValue: String
+    var intValue: Int? { nil }
+
+    init?(stringValue: String) { self.stringValue = stringValue }
+    init?(intValue: Int) { return nil }
+}
+
+/// Reads an object's fields ignoring case and underscores: `Revision` and `revision`, `HdbtUpgrade` and
+/// `hdbt_upgrade`, `Ir` and `IR`. A real NeoMatrix (firmware 3.10) spells these differently from the vendor
+/// library's models this app was first written from, and one wrongly spelled key used to stop all of the
+/// system information from loading.
+///
+/// Lookups are forgiving: a field that is missing, or present with a value of the wrong type, gives the
+/// default. Hardware details are for display, and one odd value shouldn't hide the rest.
+struct LooseObject {
+    private let container: KeyedDecodingContainer<LooseKey>
+
+    init(_ decoder: Decoder) throws {
+        container = try decoder.container(keyedBy: LooseKey.self)
+    }
+
+    private static func normalised(_ name: String) -> String {
+        name.lowercased().replacingOccurrences(of: "_", with: "")
+    }
+
+    private func key(_ name: String) -> LooseKey? {
+        let wanted = Self.normalised(name)
+        return container.allKeys.first { Self.normalised($0.stringValue) == wanted }
+    }
+
+    func has(_ name: String) -> Bool { key(name) != nil }
+
+    /// The names the device sent, as it spelled them.
+    var keys: [String] { container.allKeys.map(\.stringValue) }
+
+    /// The value, or nil if the field is missing or not a `T`.
+    func value<T: Decodable>(_ name: String, as type: T.Type = T.self) -> T? {
+        guard let key = key(name) else { return nil }
+        return try? container.decode(T.self, forKey: key)
+    }
+
+    func value<T: Decodable>(_ name: String, default fallback: T) -> T {
+        value(name) ?? fallback
+    }
+
+    /// A boolean the device may send as true/false, 0/1 or text.
+    func bool(_ name: String, default fallback: Bool = false) -> Bool {
+        bool(name) ?? fallback
+    }
+
+    func bool(_ name: String) -> Bool? {
+        guard let key = key(name) else { return nil }
+        return (try? container.decode(LenientBool.self, forKey: key))?.wrappedValue
+    }
+
+    /// An object nested under `name`, read the same loose way.
+    func object(_ name: String) -> LooseObject? {
+        guard let key = key(name), let nested = try? container.superDecoder(forKey: key) else { return nil }
+        return try? LooseObject(nested)
+    }
+}

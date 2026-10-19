@@ -56,6 +56,12 @@ public struct MatrixState: Sendable, Equatable {
     public var status: ConnectionStatus
     /// True when an admin password is set, i.e. rename/EDID/front-panel controls can work.
     public var adminConfigured: Bool
+    /// Why the system details (model, firmware, features) couldn't be loaded, while they haven't been.
+    /// A failure here doesn't touch `status`: the routing may be working perfectly.
+    public var systemError: String?
+    /// The matrix's own health report (power, temperatures, modules); nil until loaded, and for firmware
+    /// that doesn't offer it.
+    public var health: SystemHealth?
 
     public var inputs: [MatrixPort] { ports.filter { $0.mode == .input }.sorted { $0.bay < $1.bay } }
     public var outputs: [MatrixPort] { ports.filter { $0.mode == .output }.sorted { $0.bay < $1.bay } }
@@ -79,11 +85,17 @@ public actor MatrixStore {
 
     private var client: MatrixClient?
     private var admin: AdminClient?
+    /// Port polls that have failed in a row. A connection that keeps failing is thrown away and made again:
+    /// whatever state the old one was in (a wedged socket, a network that changed under it) goes with it.
+    private var failedPolls = 0
+    private var fetchingSystem = false
 
     private var ports: [MatrixPort] = []
     private var inputDetails: [Int: InputPortDetails] = [:]
     private var outputDetails: [Int: OutputPortDetails] = [:]
     private var system: SystemInfo?
+    private var systemError: String?
+    private var health: SystemHealth?
     private var lastError: String?
     private var lastPollTime: Date?
 
@@ -118,10 +130,9 @@ public actor MatrixStore {
             publish()
             return
         }
-        let transport = makeTransport(TimeInterval(config.timeout))
+        failedPolls = 0
         do {
-            client = try MatrixClient(host: host, port: config.port, transport: transport, now: now)
-            admin = try AdminClient(host: host, port: config.port, transport: transport)
+            try makeClients(host: host)
         } catch {
             lastError = error.localizedDescription
             publish()
@@ -132,6 +143,19 @@ public actor MatrixStore {
         detailsTask = Task { [weak self] in await self?.detailsLoop() }
     }
 
+    /// A new transport (so a new connection pool) and the clients over it.
+    private func makeClients(host: String) throws {
+        let transport = makeTransport(TimeInterval(config.timeout))
+        client = try MatrixClient(host: host, port: config.port, transport: transport, now: now)
+        admin = try AdminClient(host: host, port: config.port, transport: transport)
+    }
+
+    private func rebuildClients(because reason: String) {
+        guard client != nil, let host = config.host, !host.isEmpty else { return }
+        Diagnostics.note("Making the connection to \(host):\(config.port) again: \(reason)")
+        try? makeClients(host: host)
+    }
+
     public func stop() {
         stopTasks()
         client = nil
@@ -140,6 +164,8 @@ public actor MatrixStore {
         inputDetails = [:]
         outputDetails = [:]
         system = nil
+        systemError = nil
+        health = nil
         lastPollTime = nil
         lastError = nil
     }
@@ -170,7 +196,9 @@ public actor MatrixStore {
             system: system,
             updates: updatesAvailable(),
             status: status(),
-            adminConfigured: !(adminPassword ?? "").isEmpty
+            adminConfigured: !(adminPassword ?? "").isEmpty,
+            systemError: systemError,
+            health: health
         )
     }
 
@@ -211,10 +239,16 @@ public actor MatrixStore {
     // MARK: Actions
 
     /// Force an immediate retry instead of waiting for the next poll tick.
+    ///
+    /// Starts from a fresh connection, and fetches whatever hasn't loaded (a failed system details fetch used
+    /// to stay failed, so "refresh" brought back the ports and nothing else).
     public func reconnect() async throws {
         _ = try requireClient()
+        rebuildClients(because: "asked to retry")
         await pollPorts()
         publish()
+        if system == nil { await refreshSystem() }
+        spawn { await $0.refreshDetails() }
     }
 
     @discardableResult
@@ -287,6 +321,9 @@ public actor MatrixStore {
         while !Task.isCancelled {
             await pollPorts()
             publish()
+            // The matrix is answering but its system details never arrived (it wasn't reachable when they were
+            // first asked for, say): get them now rather than at the next, slower, detail poll.
+            if system == nil, lastError == nil, !fetchingSystem { spawn { await $0.refreshSystem() } }
             guard await sleep(seconds: config.pollInterval) else { return }
         }
     }
@@ -295,8 +332,9 @@ public actor MatrixStore {
         var lastSystemFetch: Date?
         while !Task.isCancelled {
             if lastSystemFetch.map({ now().timeIntervalSince($0) >= Self.systemPollInterval }) ?? true {
-                await refreshSystem()
-                lastSystemFetch = now()
+                // Only a fetch that worked counts: after a failure the next detail poll tries again,
+                // instead of leaving the system details empty for a minute.
+                if await refreshSystem() { lastSystemFetch = now() }
             }
             await refreshDetails()
             guard await sleep(seconds: config.detailPollInterval) else { return }
@@ -323,26 +361,42 @@ public actor MatrixStore {
             ports = fetched
             lastPollTime = now()
             lastError = nil
+            failedPolls = 0
         } catch {
             guard epoch == self.epoch else { return }
             lastError = error.localizedDescription
+            failedPolls += 1
+            Diagnostics.note("Port poll failed (\(failedPolls) in a row): \(error.localizedDescription)")
+            // Every second failure, so a connection that was fine and has gone bad is replaced quickly, without
+            // churning one that can't work for a plain reason (the matrix being off).
+            if failedPolls % 2 == 0 { rebuildClients(because: "\(failedPolls) failed polls") }
         }
     }
 
-    func refreshSystem() async {
-        guard let client else { return }
+    /// True if the system details were loaded.
+    @discardableResult
+    func refreshSystem() async -> Bool {
+        guard let client, !fetchingSystem else { return false }
+        fetchingSystem = true
+        defer { fetchingSystem = false }
         let epoch = epoch
+        var loaded = false
         do {
             let details = try await client.systemDetails()
             let features = try await client.systemFeatures()
-            guard epoch == self.epoch else { return }
+            guard epoch == self.epoch else { return false }
             system = SystemInfo(details: details, features: features)
-            lastError = nil
+            systemError = nil
+            loaded = true
         } catch {
-            guard epoch == self.epoch else { return }
-            lastError = error.localizedDescription
+            guard epoch == self.epoch else { return false }
+            // Kept apart from `lastError`: that one is cleared by the next successful port poll, which
+            // used to make a failure here vanish without a trace.
+            systemError = error.localizedDescription
+            Diagnostics.note("System details failed: \(error.localizedDescription)")
         }
         publish()
+        return loaded
     }
 
     func refreshDetails() async {
@@ -353,6 +407,14 @@ public actor MatrixStore {
         guard lastError == nil else {
             publish()
             return
+        }
+
+        // Temperatures and uptime move all the time, so health rides this cadence. A refusal (older firmware
+        // has no such page) keeps what was there and costs nothing else.
+        if let fetched = try? await client.systemHealth() {
+            guard epoch == self.epoch else { return }
+            health = fetched
+            publish()
         }
 
         for port in ports {

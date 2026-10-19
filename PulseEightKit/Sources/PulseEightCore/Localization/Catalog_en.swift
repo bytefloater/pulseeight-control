@@ -105,6 +105,20 @@ extension Catalog {
         .featureVideoScrambling: "Video scrambling",
         .featureUpdateInterval: "Update interval",
 
+        .healthUptime: "Uptime",
+        .healthTemperature: "Temperature {0}",
+        .healthPowerSupply: "Power supply {0}",
+        .healthInputModules: "Input modules",
+        .healthOutputModules: "Output modules",
+        .healthUpdateState: "Firmware update state",
+        .healthRail: "Supply rail {0}",
+        .healthRailOutOfRange: "{0} (out of range)",
+        .healthDegrees: "{0} °C",
+        .healthVolts: "{0} V",
+        .durationDays: "{0}d",
+        .durationHours: "{0}h",
+        .durationMinutes: "{0}m",
+
         // Intervals
         .intervalSeconds: "{0}s",
         .intervalMinutes: "{0}m",
@@ -181,6 +195,7 @@ extension Catalog {
         .errorNameEmpty: "Name can't be empty.",
         .errorNameTooLong: "Name must be {0} characters or fewer.",
         .errorHostRequired: "Enter the matrix's IP address or hostname.",
+        .errorMatrixMissing: "That matrix is no longer in the list.",
         .errorPortRange: "Port must be a number from 1 to 65535.",
         .errorTimeoutMin: "Timeout must be at least 1 second.",
         .errorPollMin: "Poll interval must be at least 1 second.",

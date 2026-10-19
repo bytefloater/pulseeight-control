@@ -27,6 +27,65 @@ public enum Presentation {
         return strings.text(.intervalHours, (minutes / 60 * 10).rounded() / 10)
     }
 
+    /// "2d 3h 14m", "5m", "40s": the two or three largest units that aren't zero.
+    public static func durationText(seconds total: Int, _ strings: Strings) -> String {
+        let seconds = max(total, 0)
+        let days = seconds / 86_400, hours = seconds % 86_400 / 3_600, minutes = seconds % 3_600 / 60
+        var parts: [String] = []
+        if days > 0 { parts.append(strings.text(.durationDays, days)) }
+        if days > 0 || hours > 0 { parts.append(strings.text(.durationHours, hours)) }
+        if days == 0 { parts.append(strings.text(.durationMinutes, minutes)) }
+        if seconds < 60 { return strings.text(.intervalSeconds, seconds) }
+        return parts.joined(separator: " ")
+    }
+
+    /// Degrees with at most one decimal: "31 °C", "31.5 °C".
+    public static func temperatureText(_ celsius: Double, _ strings: Strings) -> String {
+        strings.text(.healthDegrees, numberText(celsius, decimals: 1))
+    }
+
+    public static func voltageText(_ rail: PowerRail, _ strings: Strings) -> String {
+        let text = strings.text(.healthVolts, String(format: "%.2f", locale: Locale(identifier: "en_US_POSIX"), rail.volts))
+        return rail.ok ? text : strings.text(.healthRailOutOfRange, text)
+    }
+
+    /// What the matrix calls a part of itself, by kind.
+    public static func componentName(_ kind: HealthComponent.Kind, _ strings: Strings) -> String {
+        switch kind {
+        case .powerSupply(let number): strings.text(.healthPowerSupply, number)
+        case .inputModules: strings.text(.healthInputModules)
+        case .outputModules: strings.text(.healthOutputModules)
+        }
+    }
+
+    /// Whole numbers without a decimal point, others to `decimals` places with trailing zeros dropped.
+    private static func numberText(_ value: Double, decimals: Int) -> String {
+        let text = String(format: "%.\(decimals)f", locale: Locale(identifier: "en_US_POSIX"), value)
+        guard text.contains(".") else { return text }
+        var trimmed = text
+        while trimmed.hasSuffix("0") { trimmed.removeLast() }
+        return trimmed.hasSuffix(".") ? String(trimmed.dropLast()) : trimmed
+    }
+
+    /// The health report as label/value lines, for UIs that show plain rows.
+    public static func healthRows(_ health: SystemHealth, _ strings: Strings) -> [LabeledValue] {
+        var result: [(String, String?)] = [
+            (strings.text(.rowStatus), health.statusMessage),
+            (strings.text(.healthUptime), health.uptime.map { durationText(seconds: $0, strings) }),
+        ]
+        for part in health.components {
+            result.append((componentName(part.kind, strings), part.message.isEmpty ? String(part.status) : part.message))
+        }
+        for (index, celsius) in health.temperatures.enumerated() {
+            result.append((strings.text(.healthTemperature, index + 1), temperatureText(celsius, strings)))
+        }
+        for rail in health.rails {
+            result.append((strings.text(.healthRail, rail.name), voltageText(rail, strings)))
+        }
+        result.append((strings.text(.healthUpdateState), health.updateState.map(String.init)))
+        return rows(result)
+    }
+
     /// "Input" / "Output".
     public static func modeName(_ mode: PortMode, _ strings: Strings) -> String {
         strings.text(mode == .input ? .portInput : .portOutput)

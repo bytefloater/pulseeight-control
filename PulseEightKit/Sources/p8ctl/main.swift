@@ -1,4 +1,5 @@
 import Foundation
+import PulseEightCore
 import PulseEightKit
 
 // Small CLI over PulseEightKit. Stands in for the old POST /api/route/by-name automation
@@ -12,6 +13,7 @@ Host defaults to $P8_HOST.
 Commands:
   discover [--service URL]  Ask gotomymatrix.com (or URL) which matrix is on this network; needs no host
   status                    Show model, firmware and connection info
+  health                    Show the matrix's own health report: power, temperatures, modules, uptime
   ports                     List inputs and outputs and what is routed where
   route <input> <output>    Route an input to an output, by port name (case-insensitive)
   set <input-bay> <output-bay>
@@ -112,6 +114,10 @@ do {
         print("Serial:   \(details.serial)")
         print("Status:   \(details.statusMessage)")
         print("Ports:    \(ports.filter { $0.mode == .input }.count) in, \(ports.filter { $0.mode == .output }.count) out")
+    case "health":
+        let health = try await client.systemHealth()
+        let strings = Strings(language: .english)
+        for row in Presentation.healthRows(health, strings) { print("\(row.label): \(row.value)") }
     case "ports":
         printPorts(try await client.ports())
     case "route":

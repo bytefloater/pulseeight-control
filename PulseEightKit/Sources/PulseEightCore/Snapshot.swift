@@ -21,6 +21,23 @@ public struct CoreSnapshot: Codable, Equatable, Sendable {
         public var detailPollInterval: Int
     }
 
+    /// One of the configured matrices. The admin password itself is never part of a snapshot.
+    public struct MatrixSnapshot: Codable, Equatable, Sendable {
+        /// Pass to `selectMatrix`, `saveMatrix` and `removeMatrix`.
+        public var id: String
+        /// What the person called it, possibly empty.
+        public var name: String
+        /// The name, or the address when there is no name.
+        public var displayName: String
+        public var host: String?
+        public var port: Int
+        public var timeout: Int
+        public var pollInterval: Int
+        public var detailPollInterval: Int
+        public var adminPasswordSaved: Bool
+        public var selected: Bool
+    }
+
     public struct PortSnapshot: Codable, Equatable, Sendable {
         /// "Input" or "Output".
         public var mode: String
@@ -80,9 +97,16 @@ public struct CoreSnapshot: Codable, Equatable, Sendable {
     /// Every available language, for a picker.
     public var languages: [LanguageSnapshot]
     public var settings: SettingsSnapshot
+    /// Every configured matrix, in the order they were added.
+    public var matrices: [MatrixSnapshot]
     public var inputs: [PortSnapshot]
     public var outputs: [PortSnapshot]
+    /// Why the system details couldn't be loaded (they are missing while this is set).
+    public var systemError: String?
     public var systemRows: [LabeledValue]
+    /// The matrix's own health report (status, uptime, supplies, temperatures, rails); empty until it loads
+    /// and for firmware without one.
+    public var healthRows: [LabeledValue]
     public var featureRows: [LabeledValue]
     public var model: String?
     public var firmware: String?
@@ -95,11 +119,15 @@ extension CoreSnapshot {
     public init(core: AppCore) {
         self.init(
             update: core.update, summary: core.connectionSummary, hostLabel: core.hostLabel,
-            edidProfiles: core.edidProfiles(), strings: core.strings
+            edidProfiles: core.edidProfiles(), strings: core.strings,
+            adminPasswordSaved: Set(core.matrices.map(\.id).filter { core.hasAdminPassword(for: $0) })
         )
     }
 
-    public init(update: CoreUpdate, summary: String, hostLabel: String, edidProfiles: [EdidProfile], strings: Strings) {
+    public init(
+        update: CoreUpdate, summary: String, hostLabel: String, edidProfiles: [EdidProfile], strings: Strings,
+        adminPasswordSaved: Set<UUID> = []
+    ) {
         var detail: String?
         if case .disconnected(let reason) = update.phase { detail = reason }
         let state = update.state
@@ -151,9 +179,19 @@ extension CoreSnapshot {
                 pollInterval: matrix.pollInterval,
                 detailPollInterval: matrix.detailPollInterval
             ),
+            matrices: update.settings.matrices.map { profile in
+                MatrixSnapshot(
+                    id: profile.id.uuidString.lowercased(), name: profile.name, displayName: profile.displayName,
+                    host: profile.config.host, port: profile.config.port, timeout: profile.config.timeout,
+                    pollInterval: profile.config.pollInterval, detailPollInterval: profile.config.detailPollInterval,
+                    adminPasswordSaved: adminPasswordSaved.contains(profile.id),
+                    selected: profile.id == update.settings.selectedMatrix?.id)
+            },
             inputs: state.map { s in s.inputs.map { snapshot($0, in: s) } } ?? [],
             outputs: state.map { s in s.outputs.map { snapshot($0, in: s) } } ?? [],
+            systemError: state?.systemError,
             systemRows: state?.system.map { Presentation.systemRows($0, strings) } ?? [],
+            healthRows: state?.health.map { Presentation.healthRows($0, strings) } ?? [],
             featureRows: state?.system.map { Presentation.featureRows($0.features, strings) } ?? [],
             model: state?.system?.details.model,
             firmware: state?.system?.details.version,

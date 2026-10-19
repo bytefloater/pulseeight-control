@@ -41,6 +41,39 @@ public struct SettingsInput: Sendable, Equatable {
     }
 }
 
+/// Raw text from a matrix's form, validated by `AppCore.saveMatrix`.
+public struct MatrixInput: Sendable, Equatable {
+    /// nil adds a new matrix.
+    public var id: UUID?
+    /// Blank means the address is shown instead.
+    public var name: String
+    public var host: String
+    public var port: String
+    public var timeout: String
+    public var pollInterval: String
+    public var detailPollInterval: String
+    /// nil or empty keeps the saved password.
+    public var adminPassword: String?
+    /// Forgets the saved password (unless a new one is given).
+    public var clearAdminPassword: Bool
+
+    public init(
+        id: UUID? = nil, name: String = "", host: String, port: String = "80", timeout: String = "10",
+        pollInterval: String = "5", detailPollInterval: String = "20", adminPassword: String? = nil,
+        clearAdminPassword: Bool = false
+    ) {
+        self.id = id
+        self.name = name
+        self.host = host
+        self.port = port
+        self.timeout = timeout
+        self.pollInterval = pollInterval
+        self.detailPollInterval = detailPollInterval
+        self.adminPassword = adminPassword
+        self.clearAdminPassword = clearAdminPassword
+    }
+}
+
 public enum CoreError: Error, LocalizedError, Sendable, Equatable {
     /// User input rejected; the message is ready to show.
     case invalid(String)
@@ -69,7 +102,10 @@ public struct CoreUpdate: Sendable, Equatable {
 ///
 /// Thread-safe. Observers are called on an arbitrary thread, never while holding the lock.
 public final class AppCore: @unchecked Sendable {
-    public static let adminAccount = "admin-password"
+    /// Where the admin password of the matrix `id` lives in the secret store.
+    public static func adminAccount(for id: UUID) -> String { "admin-password.\(id.uuidString.lowercased())" }
+    /// Where the one matrix's password lived before there could be several.
+    static let legacyAdminAccount = "admin-password"
 
     private let lock = NSLock()
     private let secrets: SecretStore
@@ -96,8 +132,27 @@ public final class AppCore: @unchecked Sendable {
         self.settingsURL = settingsURL
         self.makeTransport = makeTransport
         self.now = now
+        let legacyFile = AppSettings.isLegacyFile(at: settingsURL)
         self._settings = AppSettings.load(from: settingsURL)
         self._phase = computePhase()
+        migrateSingleMatrix(rewriteFile: legacyFile)
+    }
+
+    /// A file from before there could be several matrices holds one, which is now the first matrix; its
+    /// admin password moves to that matrix's own place in the secret store. The file is rewritten in the
+    /// current form so the matrix keeps the id its password is filed under.
+    private func migrateSingleMatrix(rewriteFile: Bool) {
+        var changed = rewriteFile
+        if let first = _settings.matrices.first,
+           let old = (try? secrets.secret(for: Self.legacyAdminAccount)) ?? nil {
+            let account = Self.adminAccount(for: first.id)
+            let already = ((try? secrets.secret(for: account)) ?? nil) != nil
+            if already || (try? secrets.setSecret(old, for: account)) != nil {
+                try? secrets.setSecret(nil, for: Self.legacyAdminAccount)
+            }
+            changed = true
+        }
+        if changed { persist() }
     }
 
     // MARK: Reading state
@@ -106,6 +161,14 @@ public final class AppCore: @unchecked Sendable {
     public var state: MatrixState? { locked { latestState } }
     public var phase: ConnectionPhase { locked { _phase } }
     public var adminConfigured: Bool { locked { latestState?.adminConfigured ?? false } }
+
+    /// Every matrix that has been added.
+    public var matrices: [MatrixProfile] { settings.matrices }
+    /// The matrix being shown, if any have been added.
+    public var selectedMatrix: MatrixProfile? { settings.selectedMatrix }
+
+    /// Whether an admin password is saved for the matrix `id` (not whether it was accepted).
+    public func hasAdminPassword(for id: UUID) -> Bool { adminPassword(for: id) != nil }
 
     public var update: CoreUpdate { locked { makeUpdate() } }
 
@@ -125,11 +188,10 @@ public final class AppCore: @unchecked Sendable {
         }
     }
 
-    /// Host, plus the port when it isn't 80.
+    /// The selected matrix's name (its address when it has none).
     public var hostLabel: String {
-        let config = settings.matrix
-        guard let host = config.host, !host.isEmpty else { return strings.text(.connectionNoHost) }
-        return config.port == 80 ? host : "\(host):\(config.port)"
+        guard let matrix = selectedMatrix, matrix.config.host?.isEmpty == false else { return strings.text(.connectionNoHost) }
+        return matrix.displayName
     }
 
     /// Selectable EDID profiles for the current matrix (clone entries come from its outputs).
@@ -158,7 +220,7 @@ public final class AppCore: @unchecked Sendable {
     public func start() async {
         let alreadyStarted = locked { self.store != nil }
         guard !alreadyStarted else { return }
-        let password = (try? secrets.secret(for: Self.adminAccount)) ?? nil
+        let password = adminPassword(for: selectedMatrix?.id)
         let config = settings.matrix
         let store = MatrixStore(
             config: config, adminPassword: password, makeTransport: makeTransport, now: now
@@ -231,9 +293,11 @@ public final class AppCore: @unchecked Sendable {
 
     // MARK: Settings
 
-    /// Validates the form, saves settings and the admin password, and reconnects if the
-    /// connection changed. Throws `CoreError.invalid` with a message ready to show.
-    public func saveSettings(_ input: SettingsInput) throws {
+    /// Validates the form and saves the matrix it describes: a new one when `input.id` is nil, otherwise that
+    /// one. A first matrix becomes the selected one. Reconnects if the selected matrix's connection changed.
+    /// Throws `CoreError.invalid` with a message ready to show; returns the matrix's id.
+    @discardableResult
+    public func saveMatrix(_ input: MatrixInput) throws -> UUID {
         let host = input.host.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !host.isEmpty else { throw CoreError.invalid(strings.text(.errorHostRequired)) }
         guard let port = Int(input.port), (1...65535).contains(port) else {
@@ -250,21 +314,76 @@ public final class AppCore: @unchecked Sendable {
         }
 
         var updated = settings
-        updated.matrix = MatrixConfig(host: host, port: port, timeout: timeout, pollInterval: poll, detailPollInterval: detail)
-        let passwordChanged = !(input.adminPassword ?? "").isEmpty
+        let id = input.id ?? UUID()
+        let profile = MatrixProfile(
+            id: id, name: input.name.trimmingCharacters(in: .whitespacesAndNewlines),
+            config: MatrixConfig(host: host, port: port, timeout: timeout, pollInterval: poll, detailPollInterval: detail))
+        if let index = updated.matrices.firstIndex(where: { $0.id == id }) {
+            updated.matrices[index] = profile
+        } else if input.id != nil {
+            throw CoreError.invalid(strings.text(.errorMatrixMissing))
+        } else {
+            updated.matrices.append(profile)
+        }
+        if updated.selectedMatrix == nil || updated.selectedMatrixID == nil { updated.selectedMatrixID = updated.matrices.first?.id }
 
+        let newPassword = (input.adminPassword ?? "").isEmpty ? nil : input.adminPassword
+        let passwordChanged = newPassword != nil || input.clearAdminPassword
         do {
-            if passwordChanged, let password = input.adminPassword {
-                try secrets.setSecret(password, for: Self.adminAccount)
-            }
+            if passwordChanged { try secrets.setSecret(newPassword, for: Self.adminAccount(for: id)) }
             try updated.save(to: settingsURL)
         } catch {
             throw CoreError.failed(strings.text(.errorSaveFailed, error.localizedDescription))
         }
 
-        let connectionChanged = updated.matrix != settings.matrix || passwordChanged
+        let before = settings
         mutateSettings { $0 = updated }
+        let wasShown = before.selectedMatrix?.id == updated.selectedMatrix?.id
+        let isShown = updated.selectedMatrix?.id == id
+        let connectionChanged = !wasShown || (isShown && (before.selectedMatrix?.config != profile.config || passwordChanged))
         if connectionChanged { reconfigureStore() }
+        return id
+    }
+
+    /// Forgets a matrix and its saved admin password. If it was the selected one, the first remaining matrix is.
+    public func removeMatrix(id: UUID) throws {
+        var updated = settings
+        guard updated.matrices.contains(where: { $0.id == id }) else { throw CoreError.invalid(strings.text(.errorMatrixMissing)) }
+        let wasSelected = updated.selectedMatrix?.id == id
+        updated.matrices.removeAll { $0.id == id }
+        if wasSelected { updated.selectedMatrixID = updated.matrices.first?.id }
+        do {
+            try secrets.setSecret(nil, for: Self.adminAccount(for: id))
+            try updated.save(to: settingsURL)
+        } catch {
+            throw CoreError.failed(strings.text(.errorSaveFailed, error.localizedDescription))
+        }
+        mutateSettings(clearingState: wasSelected) { $0 = updated }
+        if wasSelected { reconfigureStore() }
+    }
+
+    /// Shows another matrix: stops talking to the current one and connects to this one.
+    public func selectMatrix(id: UUID) throws {
+        var updated = settings
+        guard updated.matrices.contains(where: { $0.id == id }) else { throw CoreError.invalid(strings.text(.errorMatrixMissing)) }
+        guard updated.selectedMatrix?.id != id else { return }
+        updated.selectedMatrixID = id
+        do {
+            try updated.save(to: settingsURL)
+        } catch {
+            throw CoreError.failed(strings.text(.errorSaveFailed, error.localizedDescription))
+        }
+        mutateSettings(clearingState: true) { $0 = updated }
+        reconfigureStore()
+    }
+
+    /// Saves the form as the selected matrix (adding one if there is none), keeping its name. What the
+    /// Windows app calls until it learns about several matrices.
+    public func saveSettings(_ input: SettingsInput) throws {
+        let current = selectedMatrix
+        try saveMatrix(MatrixInput(
+            id: current?.id, name: current?.name ?? "", host: input.host, port: input.port, timeout: input.timeout,
+            pollInterval: input.pollInterval, detailPollInterval: input.detailPollInterval, adminPassword: input.adminPassword))
     }
 
     /// Asks Pulse-Eight's discovery service (gotomymatrix.com) which matrix is on this network. nil if it
@@ -278,9 +397,11 @@ public final class AppCore: @unchecked Sendable {
         }
     }
 
+    /// Forgets the selected matrix's admin password.
     public func removeAdminPassword() throws {
+        guard let id = selectedMatrix?.id else { return }
         do {
-            try secrets.setSecret(nil, for: Self.adminAccount)
+            try secrets.setSecret(nil, for: Self.adminAccount(for: id))
         } catch {
             throw CoreError.failed(strings.text(.errorRemovePasswordFailed, error.localizedDescription))
         }
@@ -334,13 +455,25 @@ public final class AppCore: @unchecked Sendable {
     private func reconfigureStore() {
         guard let store = locked({ self.store }) else { return }
         let config = settings.matrix
-        let password = (try? secrets.secret(for: Self.adminAccount)) ?? nil
+        let password = adminPassword(for: selectedMatrix?.id)
         Task { await store.reconfigure(config: config, adminPassword: password) }
     }
 
-    private func mutateSettings(_ change: (inout AppSettings) -> Void) {
+    private func adminPassword(for id: UUID?) -> String? {
+        guard let id, let password = (try? secrets.secret(for: Self.adminAccount(for: id))) ?? nil, !password.isEmpty
+        else { return nil }
+        return password
+    }
+
+    /// `clearingState` also forgets what the previous matrix reported, so nothing of it is shown while the
+    /// next one connects.
+    private func mutateSettings(clearingState: Bool = false, _ change: (inout AppSettings) -> Void) {
         let update: CoreUpdate = locked {
             change(&_settings)
+            if clearingState {
+                latestState = nil
+                publishedKey = nil
+            }
             _phase = computePhase()
             return makeUpdate()
         }

@@ -12,7 +12,7 @@ import Testing
 
         #expect(result.skipped.isEmpty)
         #expect(result.files.map(\.name) == [
-            "system-details.json", "system-features.json", "port-list.json",
+            "system-details.json", "system-features.json", "system-health.json", "port-list.json",
             "port-details-input-0.json", "port-details-input-1.json",
             "port-details-output-0.json", "port-details-output-1.json",
         ])
@@ -27,6 +27,7 @@ import Testing
 
         #expect(try decoder.decode(SystemDetails.self, from: data("system-details.json")).model == "NeoMatrix")
         #expect(try decoder.decode(SystemFeatures.self, from: data("system-features.json")).hdbaset)
+        #expect(try decoder.decode(SystemHealth.self, from: data("system-health.json")).uptime == 899)
         #expect(try decoder.decode(PortListResponse.self, from: data("port-list.json")).ports.count == 4)
         #expect(try decoder.decode(InputPortDetails.self, from: data("port-details-input-0.json")).base.bay == 0)
         #expect(try decoder.decode(OutputPortDetails.self, from: data("port-details-output-1.json")).base.mode == .output)
@@ -80,5 +81,20 @@ import Testing
         await #expect(throws: MatrixError.api("API returned status 500")) {
             _ = try await DeviceCapture.capture(from: makeClient(transport))
         }
+    }
+}
+
+@Suite struct CaptureWithoutHealthTests {
+    @Test func aMatrixWithoutAHealthPageIsNotedAndTheRestIsCaptured() async throws {
+        let device = MockTransport.device()
+        let transport = MockTransport { request in
+            request.url.path == "/System/Health" ? MockTransport.reply("", status: 404) : device.handlerResponse(for: request)
+        }
+        let result = try await DeviceCapture.capture(from: MatrixClient(host: "10.0.0.5", transport: transport))
+
+        #expect(!result.files.map(\.name).contains("system-health.json"))
+        #expect(result.skipped.count == 1)
+        #expect(result.skipped.first?.contains("System/Health") == true)
+        #expect(result.files.count == 7)
     }
 }

@@ -26,6 +26,10 @@ public struct MatrixClient: Sendable {
         try await get("/system/features")
     }
 
+    public func systemHealth() async throws -> SystemHealth {
+        try await get("/System/Health")
+    }
+
     public func ports() async throws -> [MatrixPort] {
         try await get("/Port/List", as: PortListResponse.self).ports
     }

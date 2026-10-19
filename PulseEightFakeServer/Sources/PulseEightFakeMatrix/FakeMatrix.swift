@@ -2,7 +2,7 @@ import Foundation
 
 /// In-memory stand-in for a NeoMatrix. Serves every endpoint PulseEightKit uses:
 ///
-///     GET  /System/Details, /system/features
+///     GET  /System/Details, /system/features, /System/Health
 ///     GET  /Port/List
 ///     GET  /Port/Details/{Input|Output}/{bay}
 ///     GET  /Port/Set/{input}/{output}
@@ -12,8 +12,8 @@ import Foundation
 ///     POST /System/BacklightLED/{off|low|high}           (admin)
 ///     POST /System/StatusLED/{On|Off}                    (admin)
 ///
-/// Payload shapes are synthetic (built from the field names the client reads), not real device
-/// captures. Thread-safe: requests are handled one at a time under a lock.
+/// Payload shapes are synthetic, but the system ones spell their keys as a real NeoMatrix (firmware
+/// 3.10) does (`revision`, `hdbt_upgrade`, `IR`...), because the vendor library's spellings once hid a bug. Thread-safe: requests are handled one at a time under a lock.
 public final class FakeMatrix: @unchecked Sendable {
     public struct Options: Sendable {
         /// Inputs and outputs per side (8 or 16 on real hardware).
@@ -47,6 +47,8 @@ public final class FakeMatrix: @unchecked Sendable {
     private var loggedIn = false
     private var backlight = "High"
     private var statusLED = "On"
+    /// For the uptime the health report gives.
+    private let started = Date()
     private var inputs: [Input]
     private var outputs: [Output]
 
@@ -83,6 +85,7 @@ public final class FakeMatrix: @unchecked Sendable {
             switch (parts[0], parts[1]) {
             case ("system", "details"): return details()
             case ("system", "features"): return features()
+            case ("system", "health"): return health()
             case ("port", "list"): return portList()
             default: return nil
             }
@@ -145,7 +148,7 @@ public final class FakeMatrix: @unchecked Sendable {
         [
             "Result": true, "Model": "NeoMatrix (fake)", "Version": "1.2.3", "Serial": "FAKE0001",
             "MAC": "00:11:22:33:44:55", "VID": "1234", "BoardRev": 2,
-            "Revision": ["Main": 1, "Top": 2, "Ir": 3], "Locale": "en-GB",
+            "revision": ["main": 1, "top": 2, "ir": 3], "Locale": "en-GB",
             "StatusMessage": "OK", "Status": 0,
         ]
     }
@@ -154,11 +157,26 @@ public final class FakeMatrix: @unchecked Sendable {
         let bays = options.bays
         return [
             "Result": true, "UpdInterval": 5000, "CEC": 1, "CEC_Switching": false, "CEC_Logging": 0,
-            "CEC_Usage": 1, "PDU": false, "Sky": true, "HDBaseT": true, "HdbtUpgrade": true,
-            "MxRemote": false,
-            "Video": ["Scrambling": true, "Input": ["Bays": bays], "Output": ["Bays": bays]] as [String: Any],
-            "Audio": ["Routing": true, "Input": ["Bays": bays], "Output": ["Bays": bays]] as [String: Any],
+            "CEC_Usage": 1, "PDU": false, "Sky": true, "HDBaseT": true, "hdbt_upgrade": true,
+            "mx_remote": false,
+            "Video": ["Scrambling": true, "IR": ["Learn": true, "Blast": false], "Input": ["Bays": bays], "Output": ["Bays": bays]] as [String: Any],
+            "Audio": ["ARC": ["support": false], "Routing": true, "DSP": false, "Input": ["Bays": bays], "Output": ["Bays": bays]] as [String: Any],
             "BacklightLED": backlight, "StatusLED": statusLED,
+        ]
+    }
+
+    private func health() -> [String: Any] {
+        let rails: [[String: Any]] = [
+            ["name": "3.3V", "ok": true, "value": 3.3969], ["name": "5V", "ok": true, "value": 5.0892],
+            ["name": "12V", "ok": true, "value": 12.2565], ["name": "PoE", "ok": true, "value": 57.0767],
+        ]
+        return [
+            "Result": true, "psu": rails, "Locale": "en-GB", "StatusMessage": "Healthy", "Status": 0,
+            "Temperature0": 31, "Temperature1": 31, "Temperature2": 31, "Temperature3": 36, "Temperature4": 33,
+            "PSU1Message": "Present & Healthy", "PSU1": 0,
+            "InputModulesMessage": "All Present & Healthy", "InputModules": 0,
+            "OutputModulesMessage": "All Present & Healthy", "OutputModules": 0,
+            "SysUpdState": 6, "Uptime": Int(Date().timeIntervalSince(started)),
         ]
     }
 

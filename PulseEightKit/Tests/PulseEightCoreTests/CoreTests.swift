@@ -115,7 +115,7 @@ final class MemorySecrets: SecretStore, @unchecked Sendable {
         try core.saveSettings(SettingsInput(host: " 10.0.0.9 ", port: "8080", adminPassword: "pw"))
         #expect(core.settings.matrix.host == "10.0.0.9")
         #expect(core.settings.matrix.port == 8080)
-        #expect(try secrets.secret(for: AppCore.adminAccount) == "pw")
+        #expect(try secrets.secret(for: AppCore.adminAccount(for: try #require(core.selectedMatrix).id)) == "pw")
         #expect(AppSettings.load(from: url).matrix.host == "10.0.0.9")
         #expect(core.phase == .connecting)
         // The password never lands in the settings file.

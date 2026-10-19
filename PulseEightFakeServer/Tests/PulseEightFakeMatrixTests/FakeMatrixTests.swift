@@ -25,6 +25,21 @@ import PulseEightKit
         #expect(outputs[1].receiveFrom == 1)
     }
 
+    @Test func systemInformationDecodesLikeARealMatrixsDoes() async throws {
+        let client = try clients().matrix
+        let details = try await client.systemDetails()
+        #expect(details.revision == Revision(main: 1, top: 2, ir: 3))
+        let features = try await client.systemFeatures()
+        #expect(features.hdbtUpgrade)
+        #expect(features.video.ir?["Learn"] == .bool(true))
+        let health = try await client.systemHealth()
+        #expect(health.status == 0)
+        #expect(health.rails.count == 4)
+        #expect(health.temperatures.count == 5)
+        #expect(health.components.count == 3)
+        #expect(health.uptime != nil)
+    }
+
     @Test func bayCountIsConfigurable() async throws {
         let ports = try await clients(.init(bays: 16)).matrix.ports()
         #expect(ports.filter { $0.mode == .input }.count == 16)

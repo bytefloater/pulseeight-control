@@ -7,7 +7,7 @@ import PulseEightKit
 ///
 /// Commands: route, renamePort, setEdid, setBacklight, setStatusLed, retry, reconnect,
 /// saveSettings, removeAdminPassword, setAppearance, setLanguage, strings, setHighlightGrid,
-/// setShowStatusBar, setCheckForUpdates, validatePortName, discover. See `docs/core-interface.md` for the fields of each.
+/// setShowStatusBar, setCheckForUpdates, validatePortName, discover, saveMatrix, removeMatrix, selectMatrix. See `docs/core-interface.md` for the fields of each.
 extension AppCore {
     public func handle(requestJSON: String) async -> String {
         guard let data = requestJSON.data(using: .utf8),
@@ -42,6 +42,24 @@ extension AppCore {
                     detailPollInterval: try text(object, "detailPollInterval", default: "20"),
                     adminPassword: object["adminPassword"] as? String
                 ))
+            case "saveMatrix":
+                // Adds a matrix, or changes the one named by "id". The new matrix's id comes back in "value".
+                let id = try saveMatrix(MatrixInput(
+                    id: try optionalID(object),
+                    name: (object["name"] as? String) ?? "",
+                    host: try string(object, "host"),
+                    port: try text(object, "port", default: "80"),
+                    timeout: try text(object, "timeout", default: "10"),
+                    pollInterval: try text(object, "pollInterval", default: "5"),
+                    detailPollInterval: try text(object, "detailPollInterval", default: "20"),
+                    adminPassword: object["adminPassword"] as? String,
+                    clearAdminPassword: (object["clearAdminPassword"] as? Bool) ?? false
+                ))
+                return Self.success(value: id.uuidString.lowercased())
+            case "removeMatrix":
+                try removeMatrix(id: try requiredID(object))
+            case "selectMatrix":
+                try selectMatrix(id: try requiredID(object))
             case "removeAdminPassword":
                 try removeAdminPassword()
             case "setAppearance":
@@ -128,6 +146,17 @@ extension AppCore {
     private func bool(_ object: [String: Any], _ key: String) throws -> Bool {
         guard let value = object[key] as? Bool else { throw CoreError.invalid("Missing true/false field \"\(key)\"") }
         return value
+    }
+
+    private func requiredID(_ object: [String: Any]) throws -> UUID {
+        guard let id = try optionalID(object) else { throw CoreError.invalid("Missing text field \"id\"") }
+        return id
+    }
+
+    private func optionalID(_ object: [String: Any]) throws -> UUID? {
+        guard let value = object["id"], !(value is NSNull) else { return nil }
+        guard let text = value as? String, let id = UUID(uuidString: text) else { throw CoreError.invalid("\"id\" must be a matrix id") }
+        return id
     }
 
     private func mode(_ object: [String: Any]) throws -> PortMode {

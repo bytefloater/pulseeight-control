@@ -73,6 +73,16 @@ import PulseEightKit
         #expect(denied.flatMap { String(data: $0.body, encoding: .utf8) }?.contains("false") == true)
     }
 
+    @Test func theCloudLinkReadsLikeARealMatrixsAndItsContactAgeCountsUp() async throws {
+        let (matrix, _, fake) = try clients()
+        let first = try await matrix.monitoringSettings()
+        #expect(first.cloudConnected)
+        #expect(first.installerID == "1234")
+        try await Task.sleep(nanoseconds: 1_100_000_000)
+        #expect((try await matrix.monitoringSettings().lastContact ?? 0) > (first.lastContact ?? 0), "an age, not a timestamp")
+        _ = fake
+    }
+
     @Test func bayCountIsConfigurable() async throws {
         let ports = try await clients(.init(bays: 16)).matrix.ports()
         #expect(ports.filter { $0.mode == .input }.count == 16)

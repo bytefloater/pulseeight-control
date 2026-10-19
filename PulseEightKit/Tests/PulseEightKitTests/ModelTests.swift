@@ -128,6 +128,26 @@ import Testing
         #expect(empty.rails.isEmpty && empty.temperatures.isEmpty && empty.components.isEmpty)
     }
 
+    @Test func decodesTheCloudLinkOfARealMatrix() throws {
+        let monitoring = try decode(Fixtures.monitoringSettings, as: MonitoringSettings.self)
+        #expect(monitoring.cloudConnected, "Result is whether the matrix is connected to the cloud")
+        #expect(monitoring.lastContact == 1213)
+        #expect(monitoring.installerID == "1924")
+        #expect(monitoring.autoUpdates == true)
+        #expect(monitoring.updateAvailable == false)
+    }
+
+    @Test func theCloudLinkCopesWithWhateverTheFirmwareSends() throws {
+        let down = try decode(#"{"result":false,"lastcontact":99999,"installerId":"abc-1"}"#, as: MonitoringSettings.self)
+        #expect(!down.cloudConnected)
+        #expect(down.lastContact == 99999)
+        #expect(down.installerID == "abc-1", "an id that isn't a number is kept as text")
+
+        let bare = try decode("{}", as: MonitoringSettings.self)
+        #expect(!bare.cloudConnected)
+        #expect(bare.lastContact == nil && bare.installerID == nil && bare.autoUpdates == nil && bare.updateAvailable == nil)
+    }
+
     @Test func decodesInputDetails() throws {
         let details = try decode(Fixtures.inputDetails, as: InputPortDetails.self)
         #expect(details.base.hasSignal == true)

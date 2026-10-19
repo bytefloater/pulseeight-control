@@ -23,6 +23,7 @@ final class MockTransport: HTTPTransport, @unchecked Sendable {
             case "/System/Details": body = Fixtures.systemDetails
             case "/system/features": body = Fixtures.systemFeatures
             case "/System/Health": body = Fixtures.systemHealth
+            case "/Monitoring/Settings": body = Fixtures.monitoringSettings
             case "/Port/Details/Input/0": body = Fixtures.inputDetails
             case "/Port/Details/Input/1": body = Fixtures.inputDetails
             case "/Port/Details/Output/0": body = Fixtures.outputDetails
@@ -195,6 +196,11 @@ enum Fixtures {
 
     /// BacklightLED / StatusLED / CEC use the device's all-caps spelling, which the Python
     /// library silently failed to read.
+    /// What a real NeoMatrix (firmware 3.10.6) sends for the cloud link.
+    static let monitoringSettings = #"""
+    {"Result":true,"LastContact":1213,"InstallerId":1924,"AutoUpdates":true,"UpdateAvailable":false}
+    """#
+
     /// What a real NeoMatrix sends (one power supply, five sensors).
     static let systemHealth = #"""
     {"Result":true,"psu":[{"name":"3.3V","ok":true,"value":3.396945},{"name":"12V","ok":true,"value":12.256533},{"name":"1V top","ok":true,"value":0.000000}],"Locale":"EN_UK","StatusMessage":"Healthy","Status":0,"Temperature0":32,"Temperature1":31,"Temperature2":36,"PSU1Message":"Present & Healthy","PSU1":0,"InputModulesMessage":"All Present & Healthy","InputModules":0,"OutputModulesMessage":"All Present & Healthy","OutputModules":0,"SysUpdState":6,"Uptime":899}

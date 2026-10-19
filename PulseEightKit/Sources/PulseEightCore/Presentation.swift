@@ -77,26 +77,45 @@ public enum Presentation {
 
     /// The health report as label/value lines, for UIs that show plain rows.
     public static func healthRows(_ health: SystemHealth, _ strings: Strings) -> [LabeledValue] {
+        healthRows(health: health, monitoring: nil, strings)
+    }
+
+    /// The health report with the cloud link (`/Monitoring/Settings`) after it: whether the matrix is connected to the
+    /// cloud service, how long ago it last reported in, and the installer it is registered to. Either part may be missing.
+    public static func healthRows(health: SystemHealth?, monitoring: MonitoringSettings?, _ strings: Strings) -> [LabeledValue] {
         func row(_ label: String, _ value: String?, ok: Bool? = nil, group: String) -> LabeledValue? {
             guard let value, !value.isEmpty else { return nil }
             return LabeledValue(label, value, ok: ok, group: group)
         }
-        var result: [LabeledValue?] = [
-            row(strings.text(.rowStatus), health.statusMessage, ok: health.status == 0, group: "health"),
-            row(strings.text(.healthUptime), health.uptime.map { durationText(seconds: $0, strings) }, group: "health"),
-        ]
-        for part in health.components {
+        var result: [LabeledValue?] = []
+
+        if let health {
+            result.append(row(strings.text(.rowStatus), health.statusMessage, ok: health.status == 0, group: "health"))
+            result.append(row(strings.text(.healthUptime), health.uptime.map { durationText(seconds: $0, strings) }, group: "health"))
+            for part in health.components {
+                result.append(row(
+                    componentName(part.kind, strings), part.message.isEmpty ? String(part.status) : part.message,
+                    ok: part.isHealthy, group: "health"))
+            }
+            for (index, celsius) in health.temperatures.enumerated() {
+                result.append(row(strings.text(.healthTemperature, index + 1), temperatureText(celsius, strings), group: "diagnostics"))
+            }
+            for rail in health.rails {
+                result.append(row(strings.text(.healthRail, rail.name), voltageText(rail, strings), ok: rail.ok, group: "diagnostics"))
+            }
+            result.append(row(strings.text(.healthUpdateState), health.updateState.map(String.init), group: "health"))
+        }
+
+        if let monitoring {
             result.append(row(
-                componentName(part.kind, strings), part.message.isEmpty ? String(part.status) : part.message,
-                ok: part.isHealthy, group: "health"))
+                strings.text(.healthCloudConnection),
+                strings.text(monitoring.cloudConnected ? .healthCloudConnected : .healthCloudDisconnected),
+                ok: monitoring.cloudConnected, group: "health"))
+            result.append(row(
+                strings.text(.healthLastContact),
+                monitoring.lastContact.map { strings.text(.healthAgo, durationText(seconds: $0, strings)) }, group: "health"))
+            result.append(row(strings.text(.healthInstallerId), monitoring.installerID, group: "health"))
         }
-        for (index, celsius) in health.temperatures.enumerated() {
-            result.append(row(strings.text(.healthTemperature, index + 1), temperatureText(celsius, strings), group: "diagnostics"))
-        }
-        for rail in health.rails {
-            result.append(row(strings.text(.healthRail, rail.name), voltageText(rail, strings), ok: rail.ok, group: "diagnostics"))
-        }
-        result.append(row(strings.text(.healthUpdateState), health.updateState.map(String.init), group: "health"))
         return result.compactMap { $0 }
     }
 

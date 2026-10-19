@@ -2,7 +2,7 @@ import Foundation
 
 /// In-memory stand-in for a NeoMatrix. Serves every endpoint PulseEightKit uses:
 ///
-///     GET  /System/Details, /system/features, /System/Health
+///     GET  /System/Details, /system/features, /System/Health, /Monitoring/Settings
 ///     GET  /System/Restart                               (admin; offline for Options.restartOutage)
 ///     GET  /Port/List
 ///     GET  /Port/Details/{Input|Output}/{bay}
@@ -99,6 +99,10 @@ public final class FakeMatrix: @unchecked Sendable {
             case ("system", "details"): return details()
             case ("system", "features"): return features()
             case ("system", "health"): return health()
+            case ("monitoring", "settings"):
+                // Last contact is an age in seconds, as on a real matrix.
+                return ["Result": true, "LastContact": Int(Date().timeIntervalSince(started)), "InstallerId": 1234,
+                        "AutoUpdates": true, "UpdateAvailable": false]
             case ("system", "restart"):
                 if let denied = requireAdmin() { return denied }
                 restarts += 1

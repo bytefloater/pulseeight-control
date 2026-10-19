@@ -16,9 +16,9 @@ public enum DeviceCapture {
     }
 
     /// Fields that identify the device itself (and, in an output's details, an attached screen).
-    static let redactedKeys = ["Serial", "MAC"]
+    static let redactedKeys = ["Serial", "MAC", "InstallerId"]
 
-    /// - Parameter redact: replace serial numbers and MAC addresses with placeholders. Port names are
+    /// - Parameter redact: replace serial numbers, MAC addresses and the installer id with placeholders. Port names are
     ///   left alone, so check them before sharing a capture.
     public static func capture(from client: MatrixClient, redact: Bool = true) async throws -> Result {
         var files: [File] = []
@@ -36,6 +36,12 @@ public enum DeviceCapture {
             record("system-health.json", try await client.rawResponse("/System/Health"))
         } catch {
             skipped.append("System/Health: \(error.localizedDescription)")
+        }
+
+        do {
+            record("monitoring-settings.json", try await client.rawResponse("/Monitoring/Settings"))
+        } catch {
+            skipped.append("Monitoring/Settings: \(error.localizedDescription)")
         }
 
         let listData = try await client.rawResponse("/Port/List")

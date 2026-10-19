@@ -377,6 +377,43 @@ public struct SystemHealth: Decodable, Sendable, Equatable {
     }
 }
 
+// MARK: - Cloud monitoring
+
+/// `/Monitoring/Settings`: the matrix's link to Pulse-Eight's cloud monitoring service (the same one gotomymatrix.com
+/// uses to find it). Read only here.
+public struct MonitoringSettings: Decodable, Sendable, Equatable {
+    /// Whether the matrix is connected to the cloud service: the `Result` of the call.
+    public var cloudConnected: Bool
+    /// Seconds since the matrix last reported in. It counts up (an age, not a time of day) and goes back to 0 at
+    /// each contact; the matrix reports in about hourly.
+    public var lastContact: Int?
+    /// The installer account the matrix is registered to.
+    public var installerID: String?
+    public var autoUpdates: Bool?
+    public var updateAvailable: Bool?
+
+    public init(
+        cloudConnected: Bool, lastContact: Int? = nil, installerID: String? = nil, autoUpdates: Bool? = nil,
+        updateAvailable: Bool? = nil
+    ) {
+        self.cloudConnected = cloudConnected
+        self.lastContact = lastContact
+        self.installerID = installerID
+        self.autoUpdates = autoUpdates
+        self.updateAvailable = updateAvailable
+    }
+
+    public init(from decoder: Decoder) throws {
+        let object = try LooseObject(decoder)
+        cloudConnected = object.bool("result", default: false)
+        lastContact = object.value("lastContact")
+        // A number on firmware 3.10, but it is an identifier, so text from another version is kept as it came.
+        installerID = object.value("installerId", as: Int.self).map(String.init) ?? object.value("installerId", as: String.self)
+        autoUpdates = object.bool("autoUpdates")
+        updateAvailable = object.bool("updateAvailable")
+    }
+}
+
 // MARK: - Port details
 
 public struct OverrideEDIDDetails: Decodable, Sendable, Equatable {

@@ -30,6 +30,11 @@ public struct MatrixClient: Sendable {
         try await get("/System/Health")
     }
 
+    /// The link to the cloud monitoring service. Read only.
+    public func monitoringSettings() async throws -> MonitoringSettings {
+        try await get("/Monitoring/Settings")
+    }
+
     public func ports() async throws -> [MatrixPort] {
         try await get("/Port/List", as: PortListResponse.self).ports
     }

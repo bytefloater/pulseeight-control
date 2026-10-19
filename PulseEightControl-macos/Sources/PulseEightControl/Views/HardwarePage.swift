@@ -237,7 +237,7 @@ struct HardwarePage: View {
     }
 
     private func healthRows(_ state: MatrixState) -> [LabeledValue] {
-        state.health.map { Presentation.healthRows($0, strings) } ?? []
+        Presentation.healthRows(health: state.health, monitoring: state.monitoring, strings)
     }
 
     /// Label/value lines, with a tick or warning beside the ones the matrix judges.

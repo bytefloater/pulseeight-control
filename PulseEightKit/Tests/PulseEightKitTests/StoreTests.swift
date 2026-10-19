@@ -35,7 +35,7 @@ import Testing
     @Test func pollingPopulatesPortsDetailsSystemAndUpdates() async throws {
         let (store, _, _, recorder) = makeStore()
         await store.start()
-        let state = await recorder.wait { !$0.inputDetails.isEmpty && !$0.outputDetails.isEmpty && $0.system != nil && $0.health != nil }
+        let state = await recorder.wait { !$0.inputDetails.isEmpty && !$0.outputDetails.isEmpty && $0.system != nil && $0.health != nil && $0.monitoring != nil }
         await store.stop()
 
         let loaded = try #require(state)
@@ -46,6 +46,8 @@ import Testing
         #expect(loaded.adminConfigured)
         #expect(loaded.system?.features.backlight == .high)
         #expect(loaded.health?.statusMessage == "Healthy")
+        #expect(loaded.monitoring?.cloudConnected == true)
+        #expect(loaded.monitoring?.lastContact == 1213)
         // The fixture reports a firmware update for every output.
         #expect(loaded.updates.map(\.bay) == [0, 1])
         #expect(loaded.updates.first?.name == "Lounge TV")
@@ -118,6 +120,30 @@ import Testing
         #expect(state.system != nil)
         #expect(state.systemError == nil)
         #expect(transports.value == 2, "retrying starts from a fresh connection")
+    }
+
+    @Test func aMatrixWithoutTheCloudPageStillLoadsEverythingElse() async throws {
+        let device = MockTransport.device()
+        let transport = MockTransport { request in
+            request.url.path == "/Monitoring/Settings" ? MockTransport.reply("", status: 404) : device.handlerResponse(for: request)
+        }
+        let (store, _, _, recorder) = makeStore(transport: transport)
+        await store.start()
+        let state = await recorder.wait { !$0.inputDetails.isEmpty && $0.system != nil && $0.health != nil }
+        await store.stop()
+        #expect(state?.monitoring == nil)
+        #expect(state?.health != nil)
+        #expect(state?.status.connected == true)
+    }
+
+    @Test func theCloudPageIsOnlyEverRead() async throws {
+        let (store, transport, _, recorder) = makeStore(config: MatrixConfig(host: "10.0.0.5", pollInterval: 60, detailPollInterval: 60))
+        await store.start()
+        _ = await recorder.wait { $0.monitoring != nil }
+        await store.stop()
+        let monitoring = transport.requests.filter { $0.url.path == "/Monitoring/Settings" }
+        #expect(!monitoring.isEmpty)
+        #expect(monitoring.allSatisfy { $0.method == .get && $0.jsonBody == nil }, "read only: nothing is ever written to it")
     }
 
     /// A system details failure used to leave them empty for a minute and say nothing about why.

@@ -117,7 +117,9 @@ do {
     case "health":
         let health = try await client.systemHealth()
         let strings = Strings(language: .english)
-        for row in Presentation.healthRows(health, strings) { print("\(row.label): \(row.value)") }
+        // Not every firmware has the cloud link page, so its absence just leaves those rows out.
+        let monitoring = try? await client.monitoringSettings()
+        for row in Presentation.healthRows(health: health, monitoring: monitoring, strings) { print("\(row.label): \(row.value)") }
     case "ports":
         printPorts(try await client.ports())
     case "route":

@@ -37,6 +37,10 @@ import Testing
             _ = try decoder.decode(SystemDetails.self, from: data)
         case "system-features":
             _ = try decoder.decode(SystemFeatures.self, from: data)
+        case "monitoring-settings":
+            let monitoring = try decoder.decode(MonitoringSettings.self, from: data)
+            #expect(monitoring.lastContact != nil)
+            #expect(monitoring.installerID != nil)
         case "system-health":
             let health = try decoder.decode(SystemHealth.self, from: data)
             #expect(!health.rails.isEmpty)

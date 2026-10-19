@@ -191,7 +191,7 @@ extension CoreSnapshot {
             outputs: state.map { s in s.outputs.map { snapshot($0, in: s) } } ?? [],
             systemError: state?.systemError,
             systemRows: state?.system.map { Presentation.systemRows($0, strings) } ?? [],
-            healthRows: state?.health.map { Presentation.healthRows($0, strings) } ?? [],
+            healthRows: Presentation.healthRows(health: state?.health, monitoring: state?.monitoring, strings),
             featureRows: state?.system.map { Presentation.featureRows($0.features, strings) } ?? [],
             model: state?.system?.details.model,
             firmware: state?.system?.details.version,

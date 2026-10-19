@@ -62,6 +62,8 @@ public struct MatrixState: Sendable, Equatable {
     /// The matrix's own health report (power, temperatures, modules); nil until loaded, and for firmware
     /// that doesn't offer it.
     public var health: SystemHealth?
+    /// The matrix's link to the cloud monitoring service; nil until loaded, and for firmware without it.
+    public var monitoring: MonitoringSettings?
 
     public var inputs: [MatrixPort] { ports.filter { $0.mode == .input }.sorted { $0.bay < $1.bay } }
     public var outputs: [MatrixPort] { ports.filter { $0.mode == .output }.sorted { $0.bay < $1.bay } }
@@ -96,6 +98,7 @@ public actor MatrixStore {
     private var system: SystemInfo?
     private var systemError: String?
     private var health: SystemHealth?
+    private var monitoring: MonitoringSettings?
     private var lastError: String?
     private var lastPollTime: Date?
 
@@ -166,6 +169,7 @@ public actor MatrixStore {
         system = nil
         systemError = nil
         health = nil
+        monitoring = nil
         lastPollTime = nil
         lastError = nil
     }
@@ -198,7 +202,8 @@ public actor MatrixStore {
             status: status(),
             adminConfigured: !(adminPassword ?? "").isEmpty,
             systemError: systemError,
-            health: health
+            health: health,
+            monitoring: monitoring
         )
     }
 
@@ -422,6 +427,12 @@ public actor MatrixStore {
         if let fetched = try? await client.systemHealth() {
             guard epoch == self.epoch else { return }
             health = fetched
+            publish()
+        }
+        // The cloud link, on the same cadence (its last-contact age moves all the time too).
+        if let fetched = try? await client.monitoringSettings() {
+            guard epoch == self.epoch else { return }
+            monitoring = fetched
             publish()
         }
 

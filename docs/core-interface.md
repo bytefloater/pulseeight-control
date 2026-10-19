@@ -77,7 +77,8 @@ inputs[], outputs[]  -> port {
 },
 systemRows[], healthRows[], featureRows[]   -> [ {label, value} ]  (identical text on both platforms; healthRows is the matrix's
                                   own health report: status, uptime, power supplies and modules, temperatures, supply rails; empty
-                                  until it loads and for firmware that has none). Each healthRow also has `group` (`health`: the
+                                  until it loads and for firmware that has none; the `health` group ends with the cloud link: "Cloud connection" (`ok` true/false),
+                                  "Last contact" (how long ago the matrix last reported in) and "Installer ID", when the matrix offers them). Each healthRow also has `group` (`health`: the
                                   matrix's verdict and its parts; `diagnostics`: temperatures and supply rails) and, where the
                                   matrix judges it, `ok` (true/false); neither is present on other rows)
 systemError?                  -> why the system details couldn't be loaded (they are missing while this is set)

@@ -109,6 +109,8 @@ func waitUntil(timeout: TimeInterval = 6, _ condition: @MainActor () -> Bool) as
         #expect(health.statusMessage == "Healthy")
         #expect(health.temperatures.count == 5)
         #expect(health.rails.contains { $0.name == "12V" })
+        #expect(await waitUntil { h.model.state?.monitoring != nil })
+        #expect(h.model.state?.monitoring?.cloudConnected == true)
     }
 
     @Test func aFailureInsideTheGracePeriodStillLooksLikeConnecting() async throws {

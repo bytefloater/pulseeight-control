@@ -71,6 +71,30 @@ import PulseEightKit
         #expect(rows.filter { $0.group == "health" }.map(\.label) == ["Status", "Uptime", "Power supply 1", "Output modules"])
     }
 
+    @Test func theCloudLinkJoinsTheHealthRows() {
+        let rows = Presentation.healthRows(
+            health: SystemHealth(statusMessage: "Healthy", uptime: 90),
+            monitoring: MonitoringSettings(cloudConnected: true, lastContact: 1213, installerID: "1924"), strings)
+        #expect(rows.map(\.label) == ["Status", "Uptime", "Cloud connection", "Last contact", "Installer ID"])
+        #expect(rows.map(\.value) == ["Healthy", "1m", "Connected", "20m ago", "1924"])
+        #expect(rows.map(\.group) == ["health", "health", "health", "health", "health"])
+        #expect(rows[2].ok == true, "the cloud connection is judged, so it gets a tick or a warning")
+        #expect(rows[3].ok == nil && rows[4].ok == nil)
+    }
+
+    @Test func aMatrixThatCannotReachTheCloudIsFlagged() {
+        let rows = Presentation.healthRows(health: nil, monitoring: MonitoringSettings(cloudConnected: false, lastContact: 7200), strings)
+        #expect(rows.map(\.label) == ["Cloud connection", "Last contact"], "no installer id was reported, so no row")
+        #expect(rows.map(\.value) == ["Not connected", "2h 0m ago"])
+        #expect(rows.first?.ok == false)
+    }
+
+    @Test func theCloudRowsStandOnTheirOwnWithoutAHealthReportAndTheOldCallStillWorks() {
+        #expect(Presentation.healthRows(health: nil, monitoring: nil, strings).isEmpty)
+        let health = SystemHealth(statusMessage: "Healthy")
+        #expect(Presentation.healthRows(health, strings) == Presentation.healthRows(health: health, monitoring: nil, strings))
+    }
+
     @Test func anEmptyReportGivesNoRows() {
         #expect(Presentation.healthRows(SystemHealth(), strings).isEmpty)
     }

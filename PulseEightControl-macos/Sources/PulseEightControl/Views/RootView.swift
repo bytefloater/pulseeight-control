@@ -12,6 +12,9 @@ struct RootView: View {
         }
         .frame(minWidth: 560, minHeight: 360)
         .toolbar {
+            if !model.matrices.isEmpty {
+                ToolbarItem(placement: .navigation) { MatrixPicker(model: model, openConnections: openConnections) }
+            }
             ToolbarItem(placement: .principal) {
                 Picker("Page", selection: $model.page) {
                     ForEach(Page.allCases) { page in
@@ -26,9 +29,14 @@ struct RootView: View {
             PortDetailSheet(model: model)
         }
         .task {
-            if model.phase == .notConfigured { openSettings() }
+            if model.phase == .notConfigured { openConnections() }
         }
-        .environment(\.openMatrixSettings, { openSettings() })
+        .environment(\.openMatrixSettings, { openConnections() })
+    }
+
+    private func openConnections() {
+        model.settingsPane = .connections
+        openSettings()
     }
 
     @ViewBuilder
@@ -60,5 +68,33 @@ extension EnvironmentValues {
     var openMatrixSettings: () -> Void {
         get { self[OpenMatrixSettingsKey.self] }
         set { self[OpenMatrixSettingsKey.self] = newValue }
+    }
+}
+
+/// Chooses which configured matrix the window shows.
+struct MatrixPicker: View {
+    @Bindable var model: AppModel
+    var openConnections: () -> Void
+
+    var body: some View {
+        Menu {
+            Picker("Matrix", selection: selection) {
+                ForEach(model.matrices) { matrix in
+                    Text(matrix.displayName).tag(Optional(matrix.id))
+                }
+            }
+            .pickerStyle(.inline)
+            Divider()
+            Button("Manage Connections…", action: openConnections)
+        } label: {
+            Label(model.settings.selectedMatrix?.displayName ?? "Matrix", systemImage: "rectangle.connected.to.line.below")
+        }
+        .help("Choose the matrix to control")
+    }
+
+    private var selection: Binding<UUID?> {
+        Binding(
+            get: { model.selectedMatrixID },
+            set: { if let id = $0 { model.selectMatrix(id: id) } })
     }
 }

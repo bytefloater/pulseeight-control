@@ -39,7 +39,7 @@ struct StatusBar: View {
     }
 
     private var dotColor: Color {
-        switch model.phase {
+        switch model.displayPhase {
         case .connected: .green
         case .connecting: .orange
         case .notConfigured: .gray
@@ -79,7 +79,7 @@ struct ConnectionPanel: View {
 
     var body: some View {
         Group {
-            switch model.phase {
+            switch model.displayPhase {
             case .notConfigured:
                 ContentUnavailableView {
                     Label("No matrix configured", systemImage: "network.slash")
@@ -93,7 +93,13 @@ struct ConnectionPanel: View {
                     Button("Open Settings") { openSettings() }
                 }
             case .connecting:
-                ProgressView("Connecting to \(model.hostLabel)…")
+                VStack(spacing: 8) {
+                    ProgressView("Connecting to \(model.hostLabel)…")
+                    if model.localNetwork.state == .asking {
+                        Text("macOS is asking whether PulseEight Control may use the local network. Choose Allow.")
+                            .foregroundStyle(.secondary)
+                    }
+                }
             case .disconnected(let reason):
                 ContentUnavailableView {
                     Label("Can't reach the matrix", systemImage: "exclamationmark.triangle")

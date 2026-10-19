@@ -50,6 +50,17 @@ struct AppCommands: Commands {
         }
 
         CommandMenu("Matrix") {
+            if model.matrices.count > 1 {
+                Picker("Switch Matrix", selection: Binding(
+                    get: { model.selectedMatrixID },
+                    set: { if let id = $0 { model.selectMatrix(id: id) } }
+                )) {
+                    ForEach(model.matrices) { matrix in
+                        Text(matrix.displayName).tag(Optional(matrix.id))
+                    }
+                }
+                Divider()
+            }
             Button("Refresh Now") { model.retry() }
                 .keyboardShortcut("r")
                 .disabled(!hasHost)

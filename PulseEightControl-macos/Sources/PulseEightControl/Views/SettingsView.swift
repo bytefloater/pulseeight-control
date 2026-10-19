@@ -5,6 +5,8 @@ import SwiftUI
 struct SettingsView: View {
     @Bindable var model: AppModel
     @Bindable var updater: UpdaterModel
+    /// Which matrix's popover is open.
+    @State private var editing: MatrixEditTarget?
 
     var body: some View {
         NavigationSplitView {
@@ -18,8 +20,7 @@ struct SettingsView: View {
         } detail: {
             Form {
                 switch model.settingsPane {
-                case .matrix: matrixPane
-                case .admin: adminPane
+                case .connections: connectionsPane
                 case .appearance: appearancePane
                 case .updates: updatesPane
                 }
@@ -28,53 +29,41 @@ struct SettingsView: View {
             .navigationTitle(model.settingsPane.title)
         }
         .frame(width: 720, height: 520)
-        .onAppear { model.resetDraft() }
     }
 
     // MARK: Panes
 
     @ViewBuilder
-    private var matrixPane: some View {
-        Section("Connection") {
-            TextField("Host", text: $model.draft.host, prompt: Text("192.168.1.150"))
-                .multilineTextAlignment(.trailing)
-            LabeledContent {
-                Button(model.discovering ? "Looking…" : "Find Matrix") { Task { await model.findMatrixForSettings() } }
-                    .disabled(model.discovering)
-            } label: {
-                Text("Don't know the address?")
+    private var connectionsPane: some View {
+        Section {
+            if model.matrices.isEmpty {
+                Text("No matrices yet. Add one to get started.")
                     .foregroundStyle(.secondary)
             }
-            TextField("Port", text: $model.draft.port, prompt: Text("80"))
-                .multilineTextAlignment(.trailing)
-            TextField("Timeout (seconds)", text: $model.draft.timeout, prompt: Text("10"))
-                .multilineTextAlignment(.trailing)
-            TextField("Poll interval (seconds)", text: $model.draft.pollInterval, prompt: Text("5"))
-                .multilineTextAlignment(.trailing)
-            TextField("Detail poll interval (seconds)", text: $model.draft.detailPollInterval, prompt: Text("20"))
-                .multilineTextAlignment(.trailing)
-            applyRow
+            ForEach(model.matrices) { matrix in
+                MatrixRow(model: model, matrix: matrix, editing: $editing)
+            }
+            HStack {
+                Spacer()
+                Button("Add Matrix…") { edit(.new) }
+                    .popover(isPresented: isEditing(.new), arrowEdge: .bottom) {
+                        MatrixEditor(model: model, close: { editing = nil })
+                    }
+            }
+        } header: {
+            Text("Connections")
+        } footer: {
+            Text("Pick the matrix to control. Each one has its own address, timings and admin password; the admin password is needed to rename ports and change EDID or front panel settings, and is kept in the system's secure storage.")
         }
     }
 
-    @ViewBuilder
-    private var adminPane: some View {
-        Section {
-            SecureField(
-                "Password",
-                text: $model.draft.adminPassword,
-                prompt: Text(model.adminConfigured ? "Saved" : "Optional")
-            )
-            .multilineTextAlignment(.trailing)
-            if model.adminConfigured {
-                Button("Remove Saved Password", role: .destructive) { model.removeAdminPassword() }
-            }
-            applyRow
-        } header: {
-            Text("Admin Password")
-        } footer: {
-            Text("Needed to rename ports and change EDID or front panel settings. It is stored in the system's secure storage, never in the settings file.")
-        }
+    private func edit(_ target: MatrixEditTarget) {
+        model.beginEditingMatrix(target.id)
+        editing = target
+    }
+
+    private func isEditing(_ target: MatrixEditTarget) -> Binding<Bool> {
+        Binding(get: { editing == target }, set: { if !$0, editing == target { editing = nil } })
     }
 
     @ViewBuilder
@@ -123,17 +112,6 @@ struct SettingsView: View {
         }
     }
 
-    /// Message (if any) and the Apply button, as the last row of a group.
-    private var applyRow: some View {
-        HStack {
-            if let message = model.settingsMessage {
-                Text(message.text).foregroundStyle(message.isError ? Color.red : Color.secondary)
-            }
-            Spacer()
-            Button("Apply") { model.saveSettings() }
-        }
-    }
-
     // MARK: Bindings
 
     private var paneBinding: Binding<SettingsPane?> {
@@ -141,7 +119,7 @@ struct SettingsView: View {
     }
 
     private var appearanceBinding: Binding<Appearance> {
-        Binding(get: { model.draft.appearance }, set: { model.setAppearance($0) })
+        Binding(get: { model.settings.appearance }, set: { model.setAppearance($0) })
     }
 
     private var highlightBinding: Binding<Bool> {

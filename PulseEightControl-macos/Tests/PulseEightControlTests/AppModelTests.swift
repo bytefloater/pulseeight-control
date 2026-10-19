@@ -45,26 +45,30 @@ struct Harness {
     let transport: RecordingTransport
     let secrets: MemorySecrets
     let settingsURL: URL
+    /// The matrix `host` configured, when there is one.
+    let matrixID: UUID
 
     /// A model over an in-process fake, started and (unless `host` is nil) connected.
     static func make(
         host: String? = "10.0.0.5", password: String? = "secret", savedAdminPassword: String? = "secret", bays: Int = 4,
-        connect: Bool = true, unreachable: Bool = false
+        connect: Bool = true, unreachable: Bool = false, connectionGrace: Duration = .zero
     ) async -> Harness {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("p8app-\(UUID().uuidString)")
         let url = directory.appendingPathComponent("settings.json")
+        let matrixID = UUID()
         if let host {
             var settings = AppSettings()
-            settings.matrix = MatrixConfig(host: host, port: 80, timeout: 3, pollInterval: 1, detailPollInterval: 1)
+            settings.matrices = [MatrixProfile(id: matrixID, config: MatrixConfig(host: host, port: 80, timeout: 3, pollInterval: 1, detailPollInterval: 1))]
+            settings.selectedMatrixID = matrixID
             try? settings.save(to: url)
         }
         let matrix = FakeMatrix(.init(bays: bays, password: password))
         let transport = RecordingTransport(FakeMatrixTransport(matrix))
         transport.failing = unreachable // decided before the first poll, so there is no race with it
-        let secrets = MemorySecrets(savedAdminPassword.map { [AppCore.adminAccount: $0] } ?? [:])
+        let secrets = MemorySecrets(savedAdminPassword.map { [AppCore.adminAccount(for: matrixID): $0] } ?? [:])
         let core = AppCore(secrets: secrets, settingsURL: url, makeTransport: { _ in transport })
-        let model = AppModel(core: core)
-        let harness = Harness(model: model, matrix: matrix, transport: transport, secrets: secrets, settingsURL: url)
+        let model = AppModel(core: core, localNetwork: .disabled, connectionGrace: connectionGrace)
+        let harness = Harness(model: model, matrix: matrix, transport: transport, secrets: secrets, settingsURL: url, matrixID: matrixID)
         await model.start()
         if connect && host != nil {
             let ready = await waitUntil { model.phase == .connected && !model.ports.isEmpty && model.state?.system != nil && !(model.state?.outputDetails.isEmpty ?? true) }
@@ -95,6 +99,49 @@ func waitUntil(timeout: TimeInterval = 6, _ condition: @MainActor () -> Bool) as
         #expect(h.model.outputs.map(\.bay) == [0, 1, 2, 3])
         #expect(h.model.inputs.first?.name == "Sky")
         #expect(h.model.adminConfigured)
+    }
+
+    @Test func theMatrixsHealthReportReachesTheModel() async throws {
+        let h = await Harness.make()
+        #expect(await waitUntil { h.model.state?.health != nil })
+        let health = try #require(h.model.state?.health)
+        #expect(health.statusMessage == "Healthy")
+        #expect(health.temperatures.count == 5)
+        #expect(health.rails.contains { $0.name == "12V" })
+    }
+
+    @Test func aFailureInsideTheGracePeriodStillLooksLikeConnecting() async throws {
+        let h = await Harness.make(connect: false, unreachable: true, connectionGrace: .milliseconds(600))
+        #expect(await waitUntil { if case .disconnected = h.model.phase { true } else { false } })
+
+        // The attempt has failed, but it is still early: the screen doesn't say so yet.
+        #expect(h.model.inGracePeriod)
+        #expect(h.model.displayPhase == .connecting)
+        #expect(h.model.connectionShort == "Connecting…")
+        #expect(h.model.connectionSummary.hasPrefix("Connecting"))
+
+        // Once the grace is used up it does.
+        #expect(await waitUntil { !h.model.inGracePeriod })
+        #expect(h.model.displayPhase == h.model.phase)
+        #expect(h.model.connectionShort == "Not connected")
+    }
+
+    @Test func connectingEndsTheGracePeriodAtOnce() async throws {
+        let h = await Harness.make(connectionGrace: .seconds(30))
+        #expect(h.model.phase == .connected)
+        #expect(!h.model.inGracePeriod, "no need to wait out the grace once the matrix has answered")
+        #expect(h.model.displayPhase == .connected)
+    }
+
+    @Test func retryingGivesTheNewAttemptItsOwnGrace() async throws {
+        let h = await Harness.make(connect: false, unreachable: true, connectionGrace: .milliseconds(300))
+        #expect(await waitUntil { !h.model.inGracePeriod && { if case .disconnected = h.model.phase { true } else { false } }() })
+        #expect(h.model.connectionShort == "Not connected")
+
+        h.model.retry()
+        #expect(h.model.inGracePeriod)
+        #expect(h.model.connectionShort == "Connecting…")
+        #expect(await waitUntil { !h.model.inGracePeriod })
     }
 
     @Test func withNoHostItIsNotConfigured() async throws {
@@ -271,66 +318,120 @@ func waitUntil(timeout: TimeInterval = 6, _ condition: @MainActor () -> Bool) as
 
 @MainActor
 @Suite struct SettingsTests {
-    @Test func theDraftStartsFromTheSavedSettings() async throws {
+    @Test func editingStartsFromTheSavedMatrix() async throws {
         let h = await Harness.make()
-        #expect(h.model.draft.host == "10.0.0.5")
-        #expect(h.model.draft.port == "80")
-        #expect(h.model.draft.adminPassword.isEmpty, "the saved password is never shown")
+        h.model.beginEditingMatrix(h.matrixID)
+        #expect(h.model.matrixDraft.host == "10.0.0.5")
+        #expect(h.model.matrixDraft.port == "80")
+        #expect(h.model.matrixDraft.adminPassword.isEmpty, "the saved password is never shown")
+        #expect(h.model.matrixDraft.adminPasswordSaved)
+        #expect(h.model.matrixMessage == nil)
+    }
+
+    @Test func addingStartsFromAnEmptyForm() async throws {
+        let h = await Harness.make()
+        h.model.matrixDraft.host = "left over"
+        h.model.beginEditingMatrix(nil)
+        #expect(h.model.matrixDraft == MatrixDraft())
     }
 
     @Test func invalidInputIsRefusedWithAMessageAndNothingIsSaved() async throws {
         let h = await Harness.make()
-        h.model.draft.port = "not a port"
-        h.model.saveSettings()
+        h.model.beginEditingMatrix(h.matrixID)
+        h.model.matrixDraft.port = "not a port"
 
-        #expect(h.model.settingsMessage?.isError == true)
+        #expect(!h.model.saveMatrixDraft())
+        #expect(h.model.matrixMessage?.isError == true)
         #expect(h.model.settings.matrix.port == 80)
         #expect(AppSettings.load(from: h.settingsURL).matrix.port == 80)
     }
 
-    @Test func savingAppliesPersistsAndTrimsTheHost() async throws {
+    @Test func savingAnEditAppliesPersistsAndTrimsTheHost() async throws {
         let h = await Harness.make()
-        h.model.draft.host = "  10.0.0.9  "
-        h.model.draft.port = "8081"
-        h.model.saveSettings()
+        h.model.beginEditingMatrix(h.matrixID)
+        h.model.matrixDraft.name = "Lounge"
+        h.model.matrixDraft.host = "  10.0.0.9  "
+        h.model.matrixDraft.port = "8081"
 
-        #expect(h.model.settingsMessage?.isError == false)
-        #expect(h.model.draft.host == "10.0.0.9")
+        #expect(h.model.saveMatrixDraft())
+        #expect(h.model.matrixMessage == nil)
         #expect(await waitUntil { h.model.settings.matrix.host == "10.0.0.9" })
-        let saved = AppSettings.load(from: h.settingsURL).matrix
-        #expect(saved.host == "10.0.0.9")
-        #expect(saved.port == 8081)
+        #expect(h.model.matrices.count == 1)
+        let saved = AppSettings.load(from: h.settingsURL).selectedMatrix
+        #expect(saved?.name == "Lounge")
+        #expect(saved?.config.host == "10.0.0.9")
+        #expect(saved?.config.port == 8081)
+        #expect(h.model.hostLabel == "Lounge")
     }
 
-    @Test func resettingTheDraftDiscardsUnsavedEdits() async throws {
+    @Test func savingANewMatrixAddsItWithoutSwitchingToIt() async throws {
         let h = await Harness.make()
-        h.model.draft.host = "somewhere.else"
-        h.model.settingsMessage = ("old message", true)
-        h.model.resetDraft()
-        #expect(h.model.draft.host == "10.0.0.5")
-        #expect(h.model.settingsMessage == nil)
+        h.model.beginEditingMatrix(nil)
+        h.model.matrixDraft.name = "Cinema"
+        h.model.matrixDraft.host = "10.0.0.20"
+
+        #expect(h.model.saveMatrixDraft())
+        #expect(await waitUntil { h.model.matrices.count == 2 })
+        #expect(h.model.matrices.last?.name == "Cinema")
+        #expect(h.model.selectedMatrixID == h.matrixID, "adding doesn't change which matrix is shown")
     }
 
-    @Test func theAdminPasswordCanBeSavedAndRemoved() async throws {
+    @Test func selectingAMatrixSwitchesTheConnection() async throws {
+        let h = await Harness.make()
+        h.model.beginEditingMatrix(nil)
+        h.model.matrixDraft.name = "Cinema"
+        h.model.matrixDraft.host = "10.0.0.20"
+        h.model.saveMatrixDraft()
+        #expect(await waitUntil { h.model.matrices.count == 2 })
+        let cinema = try #require(h.model.matrices.last).id
+
+        h.model.pendingRoutes = [RouteKey(input: 0, output: 0)]
+        h.model.selectMatrix(id: cinema)
+
+        #expect(h.model.pendingRoutes.isEmpty, "routes sent to the old matrix mean nothing to the new one")
+        #expect(await waitUntil { h.model.selectedMatrixID == cinema })
+        #expect(h.model.settings.matrix.host == "10.0.0.20")
+        #expect(AppSettings.load(from: h.settingsURL).selectedMatrix?.id == cinema)
+        // The fake answers on every host, so the new matrix connects too.
+        #expect(await waitUntil { h.model.phase == .connected && h.model.hostLabel == "Cinema" })
+        #expect(!h.model.adminConfigured, "the other matrix has no admin password")
+    }
+
+    @Test func removingTheShownMatrixFallsBackToAnother() async throws {
+        let h = await Harness.make()
+        h.model.beginEditingMatrix(nil)
+        h.model.matrixDraft.host = "10.0.0.20"
+        h.model.saveMatrixDraft()
+        #expect(await waitUntil { h.model.matrices.count == 2 })
+        let other = try #require(h.model.matrices.last).id
+
+        h.model.removeMatrix(id: h.matrixID)
+        #expect(await waitUntil { h.model.matrices.map(\.id) == [other] })
+        #expect(h.model.selectedMatrixID == other)
+        #expect(try h.secrets.secret(for: AppCore.adminAccount(for: h.matrixID)) == nil)
+    }
+
+    @Test func theAdminPasswordCanBeSavedAndRemovedPerMatrix() async throws {
         let h = await Harness.make(savedAdminPassword: nil)
         #expect(!h.model.adminConfigured)
 
-        h.model.draft.adminPassword = "secret"
-        h.model.saveSettings()
-        #expect(h.model.draft.adminPassword.isEmpty, "the field is cleared after saving")
-        #expect(try h.secrets.secret(for: AppCore.adminAccount) == "secret")
+        h.model.beginEditingMatrix(h.matrixID)
+        h.model.matrixDraft.adminPassword = "secret"
+        #expect(h.model.saveMatrixDraft())
+        #expect(try h.secrets.secret(for: AppCore.adminAccount(for: h.matrixID)) == "secret")
         #expect(await waitUntil { h.model.adminConfigured })
 
-        h.model.removeAdminPassword()
-        #expect(h.model.settingsMessage?.isError == false)
-        #expect(try h.secrets.secret(for: AppCore.adminAccount) == nil)
+        h.model.beginEditingMatrix(h.matrixID)
+        #expect(h.model.matrixDraft.adminPasswordSaved)
+        h.model.matrixDraft.clearAdminPassword = true
+        #expect(h.model.saveMatrixDraft())
+        #expect(try h.secrets.secret(for: AppCore.adminAccount(for: h.matrixID)) == nil)
         #expect(await waitUntil { !h.model.adminConfigured })
     }
 
     @Test func appearanceAppliesAtOnceAndIsSaved() async throws {
         let h = await Harness.make()
         h.model.setAppearance(.dark)
-        #expect(h.model.draft.appearance == .dark)
         #expect(await waitUntil { h.model.settings.appearance == .dark })
         #expect(AppSettings.load(from: h.settingsURL).appearance == .dark)
     }

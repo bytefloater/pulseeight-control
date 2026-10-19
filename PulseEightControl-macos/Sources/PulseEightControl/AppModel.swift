@@ -19,14 +19,13 @@ enum Page: String, CaseIterable, Identifiable, CustomStringConvertible {
 }
 
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case matrix, admin, appearance, updates
+    case connections, appearance, updates
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .matrix: "Matrix"
-        case .admin: "Admin"
+        case .connections: "Connections"
         case .appearance: "Appearance"
         case .updates: "Updates"
         }
@@ -35,8 +34,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
     /// SF Symbol name for the Settings sidebar.
     var symbol: String {
         switch self {
-        case .matrix: "network"
-        case .admin: "lock"
+        case .connections: "network"
         case .appearance: "paintbrush"
         case .updates: "arrow.triangle.2.circlepath"
         }
@@ -61,8 +59,11 @@ struct PortEditDraft: Equatable {
     var saving = false
 }
 
-/// Text fields in the Settings window, kept as strings until Apply validates them.
-struct SettingsDraft: Equatable {
+/// The matrix popover's fields, kept as strings until Save validates them.
+struct MatrixDraft: Equatable {
+    /// nil while adding a matrix.
+    var id: UUID?
+    var name = ""
     var host = ""
     var port = "80"
     var timeout = "10"
@@ -70,23 +71,28 @@ struct SettingsDraft: Equatable {
     var detailPollInterval = "20"
     /// Blank means "keep what is saved".
     var adminPassword = ""
-    var appearance: Appearance = .system
+    /// A password is saved for this matrix (the field itself never shows it).
+    var adminPasswordSaved = false
+    /// Forget the saved password when saving.
+    var clearAdminPassword = false
 
     init() {}
 
-    init(_ settings: AppSettings) {
-        host = settings.matrix.host ?? ""
-        port = String(settings.matrix.port)
-        timeout = String(settings.matrix.timeout)
-        pollInterval = String(settings.matrix.pollInterval)
-        detailPollInterval = String(settings.matrix.detailPollInterval)
-        appearance = settings.appearance
+    init(_ profile: MatrixProfile, adminPasswordSaved: Bool) {
+        id = profile.id
+        name = profile.name
+        host = profile.config.host ?? ""
+        port = String(profile.config.port)
+        timeout = String(profile.config.timeout)
+        pollInterval = String(profile.config.pollInterval)
+        detailPollInterval = String(profile.config.detailPollInterval)
+        self.adminPasswordSaved = adminPasswordSaved
     }
 
-    var input: SettingsInput {
-        SettingsInput(
-            host: host, port: port, timeout: timeout, pollInterval: pollInterval,
-            detailPollInterval: detailPollInterval, adminPassword: adminPassword
+    var input: MatrixInput {
+        MatrixInput(
+            id: id, name: name, host: host, port: port, timeout: timeout, pollInterval: pollInterval,
+            detailPollInterval: detailPollInterval, adminPassword: adminPassword, clearAdminPassword: clearAdminPassword
         )
     }
 }
@@ -110,11 +116,12 @@ final class AppModel {
     private(set) var phase: ConnectionPhase
     private(set) var adminConfigured = false
 
-    var draft: SettingsDraft
+    /// The matrix popover's fields.
+    var matrixDraft = MatrixDraft()
+    /// Why the popover's Save (or Find Matrix) didn't work, or what it found.
+    var matrixMessage: (text: String, isError: Bool)?
     var page: Page = .routing
-    var settingsPane: SettingsPane = .matrix
-    /// Result of the last Settings save: (text, isError).
-    var settingsMessage: (text: String, isError: Bool)?
+    var settingsPane: SettingsPane = .connections
     var retrying = false
     /// True while gotomymatrix.com is being asked where the matrix is.
     var discovering = false
@@ -134,22 +141,45 @@ final class AppModel {
     var frontPanelError: String?
 
     let core: AppCore
+    /// Whether macOS lets this app reach the local network; without it nothing can talk to a matrix.
+    let localNetwork: LocalNetworkPermission
+    /// How long a new connection attempt is given before the screen says the matrix can't be reached. A first
+    /// attempt often fails for a moment (macOS is still asking about the local network, the Wi-Fi is just up),
+    /// and "Can't reach the matrix" for something that then fixes itself is a false alarm.
+    let connectionGrace: Duration
+    /// True from the start of an attempt until it has had its `connectionGrace`, or connects.
+    private(set) var inGracePeriod = false
+    private var graceTask: Task<Void, Never>?
 
-    init(core: AppCore = AppCore()) {
+    init(core: AppCore = AppCore(), localNetwork: LocalNetworkPermission? = nil, connectionGrace: Duration = .seconds(5)) {
+        let localNetwork = localNetwork ?? LocalNetworkPermission()
         self.core = core
+        self.connectionGrace = connectionGrace
+        self.localNetwork = localNetwork
         settings = core.settings
         phase = core.phase
-        draft = SettingsDraft(core.settings)
+        localNetwork.onGranted = { [weak self] in self?.localNetworkGranted() }
     }
 
     // MARK: Derived state
 
-    var connectionSummary: String { core.connectionSummary }
+    /// What the screen shows: a failure that is still inside its grace period counts as still connecting.
+    var displayPhase: ConnectionPhase {
+        if inGracePeriod, case .disconnected = phase { return .connecting }
+        return phase
+    }
+
+    var connectionSummary: String {
+        displayPhase == phase ? core.connectionSummary : core.strings.text(.connectionConnecting, core.hostLabel)
+    }
     var hostLabel: String { core.hostLabel }
+
+    var matrices: [MatrixProfile] { settings.matrices }
+    var selectedMatrixID: UUID? { settings.selectedMatrix?.id }
 
     /// Short form for the window chrome; the host is in Settings.
     var connectionShort: String {
-        switch phase {
+        switch displayPhase {
         case .connected: "Connected"
         case .connecting: "Connecting…"
         case .notConfigured: "Not configured"
@@ -168,10 +198,50 @@ final class AppModel {
         core.addObserver { [weak self] update in
             Task { @MainActor in self?.apply(update) }
         }
+        ensureLocalNetworkPermission()
+        beginConnectionGrace()
         await core.start()
     }
 
     private var started = false
+
+    // MARK: Connection grace
+
+    /// Starts the grace period for a new connection attempt (the app starting, a retry, another matrix).
+    func beginConnectionGrace() {
+        graceTask?.cancel()
+        guard connectionGrace > .zero else { return }
+        inGracePeriod = true
+        graceTask = Task { [connectionGrace] in
+            try? await Task.sleep(for: connectionGrace)
+            guard !Task.isCancelled else { return }
+            inGracePeriod = false
+        }
+    }
+
+    private func endConnectionGrace() {
+        graceTask?.cancel()
+        if inGracePeriod { inGracePeriod = false }
+    }
+
+    // MARK: Local network permission
+
+    /// Asks macOS for permission to use the local network, if the selected matrix is on it. Done before the first
+    /// poll so the question is on screen straight away, not discovered through a failed connection.
+    func ensureLocalNetworkPermission() {
+        guard let host = core.selectedMatrix?.config.host, !Self.isOnThisMac(host) else { return }
+        localNetwork.check()
+    }
+
+    /// The answer just turned to yes: connect now rather than at the next poll.
+    private func localNetworkGranted() {
+        if phase != .connected { retry() }
+    }
+
+    nonisolated static func isOnThisMac(_ host: String) -> Bool {
+        let name = host.trimmingCharacters(in: .whitespaces).lowercased()
+        return name == "localhost" || name == "::1" || name == "[::1]" || name.hasPrefix("127.")
+    }
 
     /// Each assignment only happens when the value changed: assigning an observable property
     /// notifies its readers even when the value is equal, which would re-run the views on every poll.
@@ -183,6 +253,7 @@ final class AppModel {
         if count != updateCount { updateCount = count }
         if update.settings != settings { settings = update.settings }
         if update.phase != phase { phase = update.phase }
+        if update.phase == .connected { endConnectionGrace() }
         if update.adminConfigured != adminConfigured { adminConfigured = update.adminConfigured }
     }
 
@@ -192,6 +263,7 @@ final class AppModel {
     func retry() {
         guard !retrying else { return }
         retrying = true
+        beginConnectionGrace()
         Task {
             try? await core.retry()
             retrying = false
@@ -200,6 +272,7 @@ final class AppModel {
 
     /// Drop the connection and start again from the saved settings.
     func reconnect() {
+        beginConnectionGrace()
         core.reconnect()
     }
 
@@ -313,34 +386,70 @@ final class AppModel {
         core.setShowStatusBar(on)
     }
 
-    /// Appearance applies immediately; the other fields wait for Apply.
     func setAppearance(_ appearance: Appearance) {
-        draft.appearance = appearance
         core.setAppearance(appearance)
     }
 
-    // MARK: Settings
+    // MARK: Matrices
 
-    /// Discards unsaved edits; called each time the Settings window appears.
-    func resetDraft() {
-        draft = SettingsDraft(core.settings)
-        settingsMessage = nil
-    }
-
-    func saveSettings() {
-        settingsMessage = nil
-        do {
-            try core.saveSettings(draft.input)
-        } catch {
-            settingsMessage = (error.localizedDescription, true)
-            return
+    /// Fills the popover's fields: from the matrix `id`, or empty to add one.
+    func beginEditingMatrix(_ id: UUID?) {
+        matrixMessage = nil
+        if let id, let profile = settings.matrices.first(where: { $0.id == id }) {
+            matrixDraft = MatrixDraft(profile, adminPasswordSaved: core.hasAdminPassword(for: id))
+        } else {
+            matrixDraft = MatrixDraft()
         }
-        draft.host = draft.host.trimmingCharacters(in: .whitespacesAndNewlines)
-        draft.adminPassword = ""
-        settingsMessage = ("Saved.", false)
     }
 
-    /// Asks the discovery service for the matrix on this network. Nil (with `message` set) if it found none.
+    /// Validates and saves the popover's fields. True when saved, so the popover can close.
+    @discardableResult
+    func saveMatrixDraft() -> Bool {
+        matrixMessage = nil
+        do {
+            try core.saveMatrix(matrixDraft.input)
+            beginConnectionGrace()
+            ensureLocalNetworkPermission()
+            return true
+        } catch {
+            matrixMessage = (error.localizedDescription, true)
+            return false
+        }
+    }
+
+    func removeMatrix(id: UUID) {
+        do {
+            try core.removeMatrix(id: id)
+            resetPerMatrixState()
+        } catch {
+            matrixMessage = (error.localizedDescription, true)
+        }
+    }
+
+    /// Shows another matrix.
+    func selectMatrix(id: UUID) {
+        guard id != core.selectedMatrix?.id else { return }
+        do {
+            try core.selectMatrix(id: id)
+            resetPerMatrixState()
+            beginConnectionGrace()
+            ensureLocalNetworkPermission()
+        } catch {
+            matrixMessage = (error.localizedDescription, true)
+        }
+    }
+
+    /// What was in flight for the matrix just left means nothing to the next one.
+    private func resetPerMatrixState() {
+        pendingRoutes = []
+        selectedPort = nil
+        backlightPending = nil
+        statusLEDPending = nil
+        frontPanelError = nil
+        routeError = nil
+    }
+
+    /// Asks the discovery service for the matrix on this network. Nil (with the reason reported) if it found none.
     private func discover(reportingTo report: (String) -> Void) async -> DiscoveredMatrix? {
         discovering = true
         defer { discovering = false }
@@ -353,37 +462,31 @@ final class AppModel {
         return nil
     }
 
-    /// Settings: fills in Host and Port from what was found. Nothing is saved until Apply.
-    func findMatrixForSettings() async {
-        settingsMessage = nil
-        guard let found = await discover(reportingTo: { settingsMessage = ($0, true) }) else { return }
-        draft.host = found.host
-        draft.port = String(found.port)
-        settingsMessage = ("Found a matrix at \(found.host). Press Apply to use it.", false)
+    /// The popover: fills in Host and Port from what was found. Nothing is saved until Save.
+    func findMatrixForDraft() async {
+        matrixMessage = nil
+        guard let found = await discover(reportingTo: { matrixMessage = ($0, true) }) else { return }
+        matrixDraft.host = found.host
+        matrixDraft.port = String(found.port)
+        matrixMessage = ("Found a matrix at \(found.host).", false)
     }
 
-    /// Connection screen: connects to what was found straight away, keeping the other saved settings.
+    /// The no-matrix screen: adds what was found and connects to it straight away.
     func findAndConnect() async {
         discoveryError = nil
         guard let found = await discover(reportingTo: { discoveryError = $0 }) else { return }
-        var saved = SettingsDraft(core.settings)
-        saved.host = found.host
-        saved.port = String(found.port)
         do {
-            try core.saveSettings(saved.input)
+            // One already configured for that address is shown rather than added a second time.
+            if let known = settings.matrices.first(where: { $0.config.host == found.host && $0.config.port == found.port }) {
+                selectMatrix(id: known.id)
+                return
+            }
+            let id = try core.saveMatrix(MatrixInput(host: found.host, port: String(found.port)))
+            try core.selectMatrix(id: id)
+            beginConnectionGrace()
+            ensureLocalNetworkPermission()
         } catch {
             discoveryError = error.localizedDescription
         }
-    }
-
-    func removeAdminPassword() {
-        do {
-            try core.removeAdminPassword()
-        } catch {
-            settingsMessage = (error.localizedDescription, true)
-            return
-        }
-        draft.adminPassword = ""
-        settingsMessage = ("Admin password removed.", false)
     }
 }

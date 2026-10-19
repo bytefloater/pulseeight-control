@@ -23,42 +23,44 @@ private struct ServiceTransport: HTTPTransport {
             .appendingPathComponent("p8discover-\(UUID().uuidString)").appendingPathComponent("settings.json")
         if let saved {
             var settings = AppSettings()
-            settings.matrix = saved
+            settings.matrices = [MatrixProfile(config: saved)]
             try? settings.save(to: url)
         }
         let core = AppCore(secrets: MemorySecrets(), settingsURL: url, makeTransport: { _ in ServiceTransport(response: response) })
-        return (AppModel(core: core), url)
+        return (AppModel(core: core, localNetwork: .disabled), url)
     }
 
-    @Test func settingsFillsInTheFieldsButDoesNotSave() async {
+    @Test func theEditorFillsInTheFieldsButDoesNotSave() async {
         let (model, url) = makeModel(Self.found)
-        await model.findMatrixForSettings()
+        model.beginEditingMatrix(nil)
+        await model.findMatrixForDraft()
 
-        #expect(model.draft.host == "192.168.1.50")
-        #expect(model.draft.port == "8080")
-        #expect(model.settingsMessage?.isError == false)
-        #expect(model.core.settings.matrix.host == nil)
+        #expect(model.matrixDraft.host == "192.168.1.50")
+        #expect(model.matrixDraft.port == "8080")
+        #expect(model.matrixMessage?.isError == false)
+        #expect(model.core.matrices.isEmpty)
         #expect(!FileManager.default.fileExists(atPath: url.path))
         #expect(!model.discovering)
     }
 
-    @Test func settingsExplainsWhenNothingWasFound() async {
+    @Test func theEditorExplainsWhenNothingWasFound() async {
         let (model, _) = makeModel(Self.none)
-        model.draft.host = "10.0.0.9"
-        await model.findMatrixForSettings()
+        model.beginEditingMatrix(nil)
+        model.matrixDraft.host = "10.0.0.9"
+        await model.findMatrixForDraft()
 
-        #expect(model.draft.host == "10.0.0.9", "a failed search leaves what was typed")
-        #expect(model.settingsMessage?.isError == true)
-        #expect(model.settingsMessage?.text.contains("No matrix found") == true)
+        #expect(model.matrixDraft.host == "10.0.0.9", "a failed search leaves what was typed")
+        #expect(model.matrixMessage?.isError == true)
+        #expect(model.matrixMessage?.text.contains("No matrix found") == true)
     }
 
-    @Test func settingsShowsAServiceFailure() async {
+    @Test func theEditorShowsAServiceFailure() async {
         let (model, _) = makeModel(.failure(TransportError("offline")))
-        await model.findMatrixForSettings()
-        #expect(model.settingsMessage?.text == "Couldn't reach gotomymatrix.com: offline")
+        await model.findMatrixForDraft()
+        #expect(model.matrixMessage?.text == "Couldn't reach gotomymatrix.com: offline")
     }
 
-    @Test func connectionScreenSavesWhatWasFoundAndKeepsOtherSettings() async {
+    @Test func connectionScreenAddsAndSelectsWhatWasFound() async {
         let (model, url) = makeModel(Self.found)
         await model.findAndConnect()
 
@@ -68,16 +70,23 @@ private struct ServiceTransport: HTTPTransport {
         #expect(AppSettings.load(from: url).matrix.host == "192.168.1.50")
     }
 
-    @Test func connectionScreenKeepsTheOtherSavedSettings() async {
+    @Test func connectionScreenAddsAnotherMatrixAndKeepsTheFirstOneAsItWas() async {
         let saved = MatrixConfig(host: "10.0.0.1", port: 80, timeout: 7, pollInterval: 3, detailPollInterval: 30)
         let (model, _) = makeModel(Self.found, saved: saved)
         await model.findAndConnect()
 
-        let matrix = model.core.settings.matrix
-        #expect(matrix.host == "192.168.1.50")
-        #expect(matrix.timeout == 7)
-        #expect(matrix.pollInterval == 3)
-        #expect(matrix.detailPollInterval == 30)
+        #expect(model.core.matrices.count == 2)
+        #expect(model.core.matrices[0].config == saved)
+        #expect(model.core.selectedMatrix?.config.host == "192.168.1.50")
+    }
+
+    @Test func connectionScreenShowsAnAlreadyConfiguredMatrixInsteadOfAddingItAgain() async {
+        let saved = MatrixConfig(host: "192.168.1.50", port: 8080)
+        let (model, _) = makeModel(Self.found, saved: saved)
+        await model.findAndConnect()
+
+        #expect(model.core.matrices.count == 1)
+        #expect(model.discoveryError == nil)
     }
 
     @Test func connectionScreenReportsNothingFoundAndSavesNothing() async {

@@ -1,3 +1,4 @@
+import PulseEightCore
 import PulseEightKit
 import SwiftUI
 
@@ -49,11 +50,19 @@ struct HardwarePage: View {
                 if let system = state.system {
                     systemSection(system)
                     featuresSection(system.features)
+                    if let health = state.health { healthSections(health) }
                     if model.adminConfigured, system.features.backlightLED != nil || system.features.statusLED != nil {
                         frontPanelSection(system.features)
                     }
                 } else {
-                    Section { Text("System details haven't loaded yet.").foregroundStyle(.secondary) }
+                    Section {
+                        if let error = state.systemError {
+                            Label("System details couldn't be loaded.", systemImage: "exclamationmark.triangle")
+                            Text(error).foregroundStyle(.secondary).textSelection(.enabled)
+                        } else {
+                            Text("System details haven't loaded yet.").foregroundStyle(.secondary)
+                        }
+                    }
                 }
                 updatesSection(state)
                 portsSection(state)
@@ -77,6 +86,55 @@ struct HardwarePage: View {
                 ("Locale", d.locale),
                 ("Status", d.statusMessage),
             ])
+        }
+    }
+
+    /// The matrix's own health report: how it feels overall and each part of it, then temperatures and rails.
+    @ViewBuilder
+    private func healthSections(_ health: SystemHealth) -> some View {
+        let strings = model.core.strings
+        Section("Health") {
+            LabeledContent("Status") {
+                healthValue(health.statusMessage.isEmpty ? String(health.status) : health.statusMessage, healthy: health.status == 0)
+            }
+            if let uptime = health.uptime {
+                LabeledContent(strings.text(.healthUptime)) { Text(Presentation.durationText(seconds: uptime, strings)) }
+            }
+            ForEach(Array(health.components.enumerated()), id: \.offset) { _, part in
+                LabeledContent(Presentation.componentName(part.kind, strings)) {
+                    healthValue(part.message.isEmpty ? String(part.status) : part.message, healthy: part.isHealthy)
+                }
+            }
+            if let state = health.updateState {
+                LabeledContent(strings.text(.healthUpdateState)) { Text(String(state)).foregroundStyle(.secondary) }
+            }
+        }
+        if !health.temperatures.isEmpty {
+            Section("Temperatures") {
+                ForEach(Array(health.temperatures.enumerated()), id: \.offset) { index, celsius in
+                    LabeledContent("Sensor \(index + 1)") { Text(Presentation.temperatureText(celsius, strings)) }
+                }
+            }
+        }
+        if !health.rails.isEmpty {
+            Section("Power Rails") {
+                ForEach(Array(health.rails.enumerated()), id: \.offset) { _, rail in
+                    LabeledContent(rail.name) {
+                        Text(Presentation.voltageText(rail, strings))
+                            .foregroundStyle(rail.ok ? Color.primary : Color.red)
+                            .monospacedDigit()
+                    }
+                }
+            }
+        }
+    }
+
+    /// A status in words, with a tick or a warning beside it.
+    private func healthValue(_ text: String, healthy: Bool) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: healthy ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                .foregroundStyle(healthy ? Color.green : Color.orange)
+            Text(text)
         }
     }
 

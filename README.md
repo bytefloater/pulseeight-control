@@ -64,6 +64,20 @@ show the icon. The shared schemes cover the same ground as the VS Code tasks:
 The Windows app is not part of the Xcode project. The `Package.swift` next to the project still builds the
 same sources with `swift build` (used by VS Code); `package.sh` there builds the `.app` without Xcode.
 
+## Troubleshooting the connection
+
+The macOS app logs what its connection to the matrix does (failed polls, retries, connections made again, with the
+system's error code) to the unified log. To watch it while reproducing a problem:
+
+```sh
+log stream --level info --predicate 'subsystem == "com.bytefloater.pulseeight-control"'
+```
+
+`p8ctl health`, `p8ctl status` and `p8ctl capture <dir>` ask the matrix directly, which tells you whether the matrix or
+the app is at fault. The first time the app runs macOS asks for **Local Network** access: choose Allow, or the app can't reach the matrix
+(it then says so and offers a button to System Settings > Privacy & Security > Local Network). The app asks as it
+starts and connects as soon as you answer. A development build that is rebuilt and re-signed may be asked again.
+
 ## Licence
 
 See `LICENSE`.

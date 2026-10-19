@@ -10,6 +10,7 @@ Usage: p8ctl [--host HOST] [--port PORT] [--timeout SECONDS] <command>
 Host defaults to $P8_HOST.
 
 Commands:
+  discover [--service URL]  Ask gotomymatrix.com (or URL) which matrix is on this network; needs no host
   status                    Show model, firmware and connection info
   ports                     List inputs and outputs and what is routed where
   route <input> <output>    Route an input to an output, by port name (case-insensitive)
@@ -51,6 +52,7 @@ func takeFlag(_ name: String) -> Bool {
     return true
 }
 
+let serviceOption = takeOption("--service")
 let redact = !takeFlag("--no-redact")
 if let value = takeInt("--port") { port = value }
 if let value = takeInt("--timeout") { timeout = value }
@@ -58,6 +60,20 @@ if let value = takeInt("--timeout") { timeout = value }
 guard let command = arguments.first else { fail(usage, code: 2) }
 if command == "-h" || command == "--help" || command == "help" {
     print(usage)
+    exit(0)
+}
+if command == "discover" {
+    do {
+        let transport = makeDefaultTransport(timeout: TimeInterval(timeout))
+        let service = serviceOption.flatMap { URL(string: $0) } ?? MatrixDiscovery.defaultService
+        if let found = try await MatrixDiscovery.find(using: transport, service: service) {
+            print("\(found.host):\(found.port)")
+        } else {
+            fail("No matrix found on this network (is the monitoring LED solid green?)", code: 3)
+        }
+    } catch {
+        fail("Error: \(error.localizedDescription)")
+    }
     exit(0)
 }
 guard let host, !host.isEmpty else { fail("No host: pass --host or set P8_HOST") }

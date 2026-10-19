@@ -23,6 +23,7 @@ private struct WinHTTPAPI {
     let queryHeaders: @convention(c) (Handle?, UInt32, Wide?, UnsafeMutableRawPointer?, UnsafeMutablePointer<UInt32>?, UnsafeMutablePointer<UInt32>?) -> Int32
     let readData: @convention(c) (Handle?, UnsafeMutableRawPointer?, UInt32, UnsafeMutablePointer<UInt32>?) -> Int32
     let closeHandle: @convention(c) (Handle?) -> Int32
+    let setOption: @convention(c) (Handle?, UInt32, UnsafeMutableRawPointer?, UInt32) -> Int32
 
     static let shared: WinHTTPAPI? = {
         guard let module = "winhttp.dll".withCString(encodedAs: UTF16.self, { LoadLibraryW($0) }) else { return nil }
@@ -39,12 +40,13 @@ private struct WinHTTPAPI {
             let receiveResponse = symbol("WinHttpReceiveResponse", as: (@convention(c) (Handle?, UnsafeRawPointer?) -> Int32).self),
             let queryHeaders = symbol("WinHttpQueryHeaders", as: (@convention(c) (Handle?, UInt32, Wide?, UnsafeMutableRawPointer?, UnsafeMutablePointer<UInt32>?, UnsafeMutablePointer<UInt32>?) -> Int32).self),
             let readData = symbol("WinHttpReadData", as: (@convention(c) (Handle?, UnsafeMutableRawPointer?, UInt32, UnsafeMutablePointer<UInt32>?) -> Int32).self),
-            let closeHandle = symbol("WinHttpCloseHandle", as: (@convention(c) (Handle?) -> Int32).self)
+            let closeHandle = symbol("WinHttpCloseHandle", as: (@convention(c) (Handle?) -> Int32).self),
+            let setOption = symbol("WinHttpSetOption", as: (@convention(c) (Handle?, UInt32, UnsafeMutableRawPointer?, UInt32) -> Int32).self)
         else { return nil }
         return WinHTTPAPI(
             open: open, setTimeouts: setTimeouts, connect: connect, openRequest: openRequest,
             sendRequest: sendRequest, receiveResponse: receiveResponse, queryHeaders: queryHeaders,
-            readData: readData, closeHandle: closeHandle)
+            readData: readData, closeHandle: closeHandle, setOption: setOption)
     }()
 }
 
@@ -133,6 +135,13 @@ public struct WinHTTPTransport: HTTPTransport {
         }) else { throw fail("Couldn't create the request") }
         defer { _ = api.closeHandle(handle) }
 
+        if !request.followRedirects {
+            var policy: UInt32 = 0 // WINHTTP_OPTION_REDIRECT_POLICY_NEVER
+            // WINHTTP_OPTION_REDIRECT_POLICY
+            guard api.setOption(handle, 88, &policy, UInt32(MemoryLayout<UInt32>.size)) != 0
+            else { throw fail("Couldn't turn off redirects") }
+        }
+
         // A fresh connection per request: the matrix closes idle ones, and reusing a closed one fails.
         let headers = wide("Connection: close\r\n" + (request.jsonBody == nil ? "" : "Content-Type: application/json\r\n"))
         let body = request.jsonBody ?? Data()
@@ -152,6 +161,19 @@ public struct WinHTTPTransport: HTTPTransport {
         guard api.queryHeaders(handle, 19 | 0x2000_0000, nil, &status, &statusSize, nil) != 0
         else { throw fail("No status code") }
 
+        var location: String?
+        if !request.followRedirects {
+            // WINHTTP_QUERY_LOCATION; the size is in bytes and includes the terminator, so ask for the size first.
+            var size: UInt32 = 0
+            _ = api.queryHeaders(handle, 33, nil, nil, &size, nil)
+            if size > 2 {
+                var text = [UInt16](repeating: 0, count: Int(size) / 2 + 1)
+                if text.withUnsafeMutableBytes({ api.queryHeaders(handle, 33, nil, $0.baseAddress, &size, nil) }) != 0 {
+                    location = String(decoding: text.prefix { $0 != 0 }, as: UTF16.self)
+                }
+            }
+        }
+
         var data = Data()
         var buffer = [UInt8](repeating: 0, count: 16 * 1024)
         while true {
@@ -161,7 +183,7 @@ public struct WinHTTPTransport: HTTPTransport {
             if read == 0 { break }
             data.append(buffer, count: Int(read))
         }
-        return HTTPResponse(status: Int(status), body: data)
+        return HTTPResponse(status: Int(status), body: data, location: location)
     }
 }
 #endif

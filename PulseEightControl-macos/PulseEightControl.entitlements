@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- With the hardened runtime on, an app only loads frameworks signed by the same team. An ad-hoc
+	     signed build (every development build, and releases until there is a Developer ID) has no team,
+	     so it could not load Sparkle. This switches that check off for such builds. package.sh leaves
+	     it out when signing with P8_SIGN_IDENTITY, because then Sparkle is signed with the same identity
+	     and the check passes. -->
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+</dict>
+</plist>

@@ -43,13 +43,40 @@ yet), so a lost or replaced key would mean everyone installing the app again by 
   signed by the private half. This is what protects people from a tampered update, so **guard the private
   key** (a GitHub secret, never a file in the repository) and keep a backup: losing it means shipping a
   new build with a new key to everyone by hand.
-* The apps are **ad-hoc code signed, not notarized** (no Apple Developer ID yet). Consequences:
+* Until there is an Apple Developer ID the apps are **ad-hoc code signed, not notarized**. Consequences:
   * the first install, from a browser-downloaded `.dmg`, shows macOS's "unidentified developer" warning:
     right-click the app, choose Open (or allow it in System Settings > Privacy & Security);
-  * updates installed by the app itself are not quarantined, so they don't show that warning again;
-  * hardened runtime is off, because with an ad-hoc signature its library validation refuses to load
-    Sparkle. When a Developer ID is available: turn `ENABLE_HARDENED_RUNTIME` on in the Xcode project,
-    sign with `--options runtime` in `package.sh`, and notarize.
+  * updates installed by the app itself are not quarantined, so they don't show that warning again.
+* The macOS app is built with the **hardened runtime on** (`ENABLE_HARDENED_RUNTIME` in the Xcode project,
+  `--options runtime` in `package.sh`), as notarization requires. The runtime's library validation only
+  loads frameworks signed by the same team, and an ad-hoc signature has no team, so ad-hoc builds (every
+  development build, and releases until there is a Developer ID) carry `PulseEightControl-macos/PulseEightControl.entitlements`,
+  which switches that check off. Without it the app aborts at launch with "Library not loaded: Sparkle".
+
+### Notarizing the macOS app (optional, not set up)
+
+CI does **not** notarize, and nothing in the workflows sets `P8_SIGN_IDENTITY`, so every release stays ad-hoc
+signed. This section is only for if it is ever decided to notarize, which needs a paid Apple Developer account and a **Developer ID Application** certificate in the keychain.
+
+```sh
+P8_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" PulseEightControl-macos/package.sh release --universal
+```
+
+With `P8_SIGN_IDENTITY` set, `package.sh` signs Sparkle's helpers, the framework and the app with that one
+identity (hardened runtime, secure timestamp) and leaves the entitlement out, so library validation stays on
+and passes because everything shares the team. Then notarize and staple:
+
+```sh
+ditto -c -k --keepParent out/macos/PulseEightControl.app out/macos/PulseEightControl.zip
+xcrun notarytool submit out/macos/PulseEightControl.zip --keychain-profile "<profile>" --wait   # store the profile once with `xcrun notarytool store-credentials`
+xcrun stapler staple out/macos/PulseEightControl.app
+```
+
+Staple before the app goes into the disk image, and notarize the `.dmg` too if you ship one. The Developer ID
+path of `package.sh` and these commands have not been run yet (no certificate), so expect to fix details on the
+first attempt. If it is ever moved into CI it needs the certificate (as a base64 `.p12` secret) and the notarytool
+credentials as secrets, imported into a temporary keychain in `release.yml`. When the app is signed with a Developer
+ID, Sparkle's key rotation can rely on that signature (see Keys below).
 
 ## Keys
 

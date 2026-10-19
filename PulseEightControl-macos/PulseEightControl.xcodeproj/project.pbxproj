@@ -283,17 +283,20 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = PulseEightControl;
 				CLANG_ENABLE_OBJC_WEAK = YES;
+				CODE_SIGN_ENTITLEMENTS = PulseEightControl.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEAD_CODE_STRIPPING = YES;
-				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "PulseEight Control";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
-				// Where the embedded Sparkle.framework lives in the app bundle.
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = "com.bytefloater.pulseeight-control";
 				PRODUCT_NAME = PulseEightControl;
 			};
@@ -304,17 +307,20 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = PulseEightControl;
 				CLANG_ENABLE_OBJC_WEAK = YES;
+				CODE_SIGN_ENTITLEMENTS = PulseEightControl.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEAD_CODE_STRIPPING = YES;
-				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "PulseEight Control";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
-				// Where the embedded Sparkle.framework lives in the app bundle.
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = "com.bytefloater.pulseeight-control";
 				PRODUCT_NAME = PulseEightControl;
 			};

@@ -12,15 +12,19 @@ struct PulseEightControlApp: App {
         // A single window (not a WindowGroup), so there is no File > New Window.
         Window("PulseEight Control", id: "main") {
             RootView(model: model)
-                .preferredColorScheme(model.settings.appearance.colorScheme)
                 .task { await model.start() }
+                // Set on the app rather than with `.preferredColorScheme`: that modifier can't go back to
+                // "follow the system" cleanly. Choosing System left the window half redrawn in the old
+                // scheme until it next took focus.
+                .onChange(of: model.settings.appearance, initial: true) { _, appearance in
+                    NSApp.appearance = appearance.nsAppearance
+                }
         }
         .defaultSize(width: 900, height: 660)
         .commands { AppCommands(model: model, updater: updater) }
 
         Settings {
             SettingsView(model: model, updater: updater)
-                .preferredColorScheme(model.settings.appearance.colorScheme)
         }
     }
 }
@@ -37,11 +41,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 extension Appearance {
     /// nil follows the system.
-    var colorScheme: ColorScheme? {
+    var nsAppearance: NSAppearance? {
         switch self {
         case .system: nil
-        case .light: .light
-        case .dark: .dark
+        case .light: NSAppearance(named: .aqua)
+        case .dark: NSAppearance(named: .darkAqua)
         }
     }
 }

@@ -44,7 +44,22 @@ public struct AdminClient: Sendable {
         try await post("/System/StatusLED/\(on ? "On" : "Off")", body: [:])
     }
 
+    /// Restarts the matrix. The device does this the moment it is asked, with no confirmation of its own, so
+    /// callers must have asked the person first. The device may cut the connection as it goes down, so a dropped
+    /// connection after a successful login counts as the restart having begun. Never sent twice.
+    public func restart(password: String) async throws {
+        try await login(password)
+        do {
+            try await send(HTTPRequest(method: .get, url: url("/System/Restart"), retryOnDrop: false), path: "/System/Restart")
+        } catch MatrixError.admin(let message) where message.hasPrefix(Self.unreachablePrefix) && message.contains(Self.droppedMarker) {
+            return
+        }
+    }
+
     // MARK: Plumbing
+
+    private static let unreachablePrefix = "Failed to reach matrix"
+    private static let droppedMarker = "connection dropped:"
 
     private func login(_ password: String) async throws {
         try await post("/Account/Login", body: ["Password": password])
@@ -73,7 +88,9 @@ public struct AdminClient: Sendable {
         do {
             response = try await transport.send(request)
         } catch let error as TransportError {
-            throw MatrixError.admin("Failed to reach matrix: \(error.description)")
+            // A dropped connection is called one in the text so `restart` can tell it from a refusal or a timeout.
+            let kind = error.isConnectionDrop ? "\(Self.droppedMarker) " : ""
+            throw MatrixError.admin("\(Self.unreachablePrefix): \(kind)\(error.description)")
         }
         guard response.status == 200 else {
             throw MatrixError.admin("\(path) returned HTTP \(response.status)")

@@ -101,6 +101,8 @@ public final class FakeMatrixServer: @unchecked Sendable {
 
     private func serve(_ client: Sockets.Handle) {
         guard let request = readRequest(client) else { return }
+        // Restarting: say nothing, as a matrix that is starting up would (the caller closes the connection).
+        if matrix.isOffline { return }
         if matrix.options.latency > 0 { Thread.sleep(forTimeInterval: matrix.options.latency) }
 
         let path = request.target.split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? "/"

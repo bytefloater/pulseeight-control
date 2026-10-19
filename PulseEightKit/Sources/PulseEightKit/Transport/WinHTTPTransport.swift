@@ -97,7 +97,7 @@ public struct WinHTTPTransport: HTTPTransport {
         var attempt = 0
         while true {
             do { return try perform(request, on: session) }
-            catch let error as TransportError where error.isConnectionDrop && attempt < 2 {
+            catch let error as TransportError where error.isConnectionDrop && request.retryOnDrop && attempt < 2 {
                 attempt += 1
                 Thread.sleep(forTimeInterval: 0.05 * Double(attempt))
             }

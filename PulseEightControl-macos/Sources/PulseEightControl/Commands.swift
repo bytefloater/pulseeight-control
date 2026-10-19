@@ -79,6 +79,9 @@ struct AppCommands: Commands {
             ))
             .disabled(features?.statusLED == nil || !model.adminConfigured)
             Divider()
+            Button("Restart Matrix…") { model.requestRestart() }
+                .disabled(!model.adminConfigured || model.isRestarting)
+            Divider()
             Button("Copy Matrix Address") { copyAddress() }
                 .keyboardShortcut("c", modifiers: [.command, .shift])
                 .disabled(matrixAddress == nil)

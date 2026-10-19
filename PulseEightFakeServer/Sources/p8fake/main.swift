@@ -14,6 +14,8 @@ Usage: p8fake [options]
   --password TEXT    admin password; omit to allow admin calls without logging in
   --bays N           inputs and outputs per side (default 8; 8 or 16 on real hardware)
   --latency SECONDS  delay every reply, to see pending states in a UI (default 0)
+  --restart-outage SECONDS
+                     how long the fake stays unreachable after /System/Restart (default 8; a real matrix takes about a minute)
   --quiet            don't log each request
   --help             show this text
 """
@@ -49,9 +51,10 @@ let password = takeOption("--password")
 guard let port = UInt16(takeOption("--port") ?? "8080") else { fail("--port must be a number from 0 to 65535") }
 guard let bays = Int(takeOption("--bays") ?? "8"), bays >= 1 else { fail("--bays must be a positive number") }
 guard let latency = Double(takeOption("--latency") ?? "0"), latency >= 0 else { fail("--latency must be a number of seconds") }
+guard let restartOutage = Double(takeOption("--restart-outage") ?? "8"), restartOutage >= 0 else { fail("--restart-outage must be a number of seconds") }
 if let unknown = arguments.first { fail("Unknown argument \(unknown)\n\n\(usage)") }
 
-let matrix = FakeMatrix(.init(bays: bays, password: password, latency: latency))
+let matrix = FakeMatrix(.init(bays: bays, password: password, latency: latency, restartOutage: restartOutage))
 func output(_ line: String) {
     FileHandle.standardOutput.write(Data((line + "\n").utf8))
 }

@@ -11,12 +11,16 @@ public struct HTTPRequest: Sendable {
     public var jsonBody: Data?
     /// False to hand a 3xx back as the response (with `HTTPResponse.location`) instead of following it.
     public var followRedirects: Bool
+    /// False for a request that must not be sent twice, such as one that restarts the matrix: the transport then
+    /// reports a dropped connection instead of quietly trying again.
+    public var retryOnDrop: Bool
 
-    public init(method: Method, url: URL, jsonBody: Data? = nil, followRedirects: Bool = true) {
+    public init(method: Method, url: URL, jsonBody: Data? = nil, followRedirects: Bool = true, retryOnDrop: Bool = true) {
         self.method = method
         self.url = url
         self.jsonBody = jsonBody
         self.followRedirects = followRedirects
+        self.retryOnDrop = retryOnDrop
     }
 }
 
@@ -92,7 +96,7 @@ public struct URLSessionTransport: HTTPTransport {
         while true {
             do {
                 return try await sendOnce(request)
-            } catch let error as TransportError where error.isConnectionDrop && attempt < 2 {
+            } catch let error as TransportError where error.isConnectionDrop && request.retryOnDrop && attempt < 2 {
                 attempt += 1
                 Diagnostics.note("Connection dropped on \(request.url.path), retrying (\(attempt)): \(error.description)")
                 try? await Task.sleep(nanoseconds: UInt64(50_000_000 * attempt))

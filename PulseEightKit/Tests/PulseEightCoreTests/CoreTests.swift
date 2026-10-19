@@ -123,6 +123,37 @@ final class MemorySecrets: SecretStore, @unchecked Sendable {
         #expect(!text.contains("pw"))
     }
 
+    @Test func theRestartCommandRefusesWithoutConfirmationAndSendsNothing() async throws {
+        let (core, transport, _, _) = try makeCore(host: "10.0.0.5")
+        try core.saveMatrix(MatrixInput(id: core.selectedMatrix?.id, host: "10.0.0.5", adminPassword: "pw"))
+        await core.start()
+
+        for request in [#"{"cmd":"restart"}"#, #"{"cmd":"restart","confirmed":false}"#, #"{"cmd":"restart","confirmed":"yes"}"#] {
+            let reply = await core.handle(requestJSON: request)
+            #expect(reply.contains(#""ok":false"#) && reply.contains("confirmed"), "\(request) must be refused")
+        }
+        await core.stop()
+        #expect(!transport.paths.contains("/System/Restart"))
+    }
+
+    @Test func theRestartCommandNeedsAnAdminPasswordEvenWhenConfirmed() async throws {
+        let (core, transport, _, _) = try makeCore(host: "10.0.0.5")
+        await core.start()
+        let reply = await core.handle(requestJSON: #"{"cmd":"restart","confirmed":true}"#)
+        await core.stop()
+        #expect(reply.contains(#""ok":false"#))
+        #expect(!transport.paths.contains("/System/Restart"))
+    }
+
+    @Test func aConfirmedRestartIsSentOnce() async throws {
+        let (core, transport, _, _) = try makeCore(host: "10.0.0.5")
+        try core.saveMatrix(MatrixInput(id: core.selectedMatrix?.id, host: "10.0.0.5", adminPassword: "pw"))
+        await core.start()
+        #expect(await core.handle(requestJSON: #"{"cmd":"restart","confirmed":true}"#) == #"{"ok":true}"#)
+        await core.stop()
+        #expect(transport.paths.filter { $0 == "/System/Restart" }.count == 1)
+    }
+
     @Test func observersHearAboutChangesButNotQuietPolls() async throws {
         let (core, _, _, _) = try makeCore(host: "10.0.0.5")
         let count = Counter()

@@ -54,6 +54,7 @@ struct HardwarePage: View {
                     if model.adminConfigured, system.features.backlightLED != nil || system.features.statusLED != nil {
                         frontPanelSection(system.features)
                     }
+                    if model.adminConfigured { maintenanceSection }
                 } else {
                     Section {
                         if let error = state.systemError {
@@ -155,18 +156,36 @@ struct HardwarePage: View {
         }
     }
 
+    /// Admin only. The restart itself is only sent after the confirmation alert (see `AppModel.requestRestart`).
+    private var maintenanceSection: some View {
+        Section {
+            ControlRow("Restart") {
+                Button("Restart Matrix…", role: .destructive) { model.requestRestart() }
+            }
+        } header: {
+            Text("Maintenance")
+        } footer: {
+            Text("Restarting interrupts everything routed through the matrix for about a minute.")
+        }
+    }
+
     private func frontPanelSection(_ f: SystemFeatures) -> some View {
         Section("Front Panel") {
             if let level = f.backlight {
-                Picker("Backlight", selection: backlightBinding(current: level)) {
-                    ForEach(BacklightOption.allCases, id: \.self) { Text($0.title).tag($0) }
+                ControlRow("Backlight") {
+                    Picker("Backlight", selection: backlightBinding(current: level)) {
+                        ForEach(BacklightOption.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .fixedSize()
+                    .disabled(model.backlightPending != nil)
                 }
-                .pickerStyle(.segmented)
-                .disabled(model.backlightPending != nil)
             }
             if let on = f.statusLEDOn {
-                Toggle("Status LED", isOn: statusLEDBinding(current: on))
-                    .disabled(model.statusLEDPending != nil)
+                ControlRow("Status LED") {
+                    Toggle("Status LED", isOn: statusLEDBinding(current: on))
+                        .disabled(model.statusLEDPending != nil)
+                }
             }
             if let error = model.frontPanelError {
                 Text(error).foregroundStyle(.red)

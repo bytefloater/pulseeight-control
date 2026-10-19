@@ -7,7 +7,7 @@ import PulseEightKit
 ///
 /// Commands: route, renamePort, setEdid, setBacklight, setStatusLed, retry, reconnect,
 /// saveSettings, removeAdminPassword, setAppearance, setLanguage, strings, setHighlightGrid,
-/// setShowStatusBar, setCheckForUpdates, validatePortName, discover, saveMatrix, removeMatrix, selectMatrix. See `docs/core-interface.md` for the fields of each.
+/// setShowStatusBar, setCheckForUpdates, validatePortName, discover, saveMatrix, removeMatrix, selectMatrix, restart. See `docs/core-interface.md` for the fields of each.
 extension AppCore {
     public func handle(requestJSON: String) async -> String {
         guard let data = requestJSON.data(using: .utf8),
@@ -27,6 +27,13 @@ extension AppCore {
                 let raw = try string(object, "level").lowercased()
                 guard let level = BacklightLevel(rawValue: raw) else { throw CoreError.invalid("level must be off, low or high") }
                 try await setBacklight(level)
+            case "restart":
+                // The matrix restarts at once and everything routed through it is interrupted, so a caller must say
+                // it has asked the person.
+                guard (object["confirmed"] as? Bool) == true else {
+                    throw CoreError.invalid("Restarting the matrix needs \"confirmed\": true, after asking the person")
+                }
+                try await restartMatrix()
             case "setStatusLed":
                 try await setStatusLED(on: try bool(object, "on"))
             case "retry":

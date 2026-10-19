@@ -40,6 +40,39 @@ import PulseEightKit
         #expect(health.uptime != nil)
     }
 
+    @Test func restartIsAdminOnlyAndCounted() async throws {
+        let (_, admin, fake) = try clients(.init(password: "secret"))
+        await #expect(throws: MatrixError.self) { try await admin.restart(password: "wrong") }
+        #expect(fake.restartCount == 0)
+
+        try await admin.restart(password: "secret")
+        #expect(fake.restartCount == 1)
+    }
+
+    @Test func aRestartLeavesTheMatrixUnreachableForItsOutageThenItComesBack() async throws {
+        let (matrix, admin, fake) = try clients(.init(password: "secret", restartOutage: 0.4))
+        try await admin.restart(password: "secret")
+        #expect(fake.isOffline)
+        await #expect(throws: MatrixError.self) { _ = try await matrix.ports() }
+
+        try await Task.sleep(nanoseconds: 600_000_000)
+        #expect(!fake.isOffline)
+        #expect(try await matrix.ports().count == 16)
+    }
+
+    @Test func aRestartStartsTheUptimeAgainAndForgetsTheLogin() async throws {
+        let (matrix, admin, fake) = try clients(.init(password: "secret"))
+        try await Task.sleep(nanoseconds: 1_100_000_000)
+        #expect(try await matrix.systemHealth().uptime ?? 0 >= 1)
+
+        try await admin.restart(password: "secret")
+        #expect(try await matrix.systemHealth().uptime == 0)
+        // Logged in no longer: an admin call without logging in again is refused (the clients log in each time,
+        // so use the raw route).
+        let denied = fake.handle(method: "POST", path: "/System/StatusLED/Off", body: nil)
+        #expect(denied.flatMap { String(data: $0.body, encoding: .utf8) }?.contains("false") == true)
+    }
+
     @Test func bayCountIsConfigurable() async throws {
         let ports = try await clients(.init(bays: 16)).matrix.ports()
         #expect(ports.filter { $0.mode == .input }.count == 16)

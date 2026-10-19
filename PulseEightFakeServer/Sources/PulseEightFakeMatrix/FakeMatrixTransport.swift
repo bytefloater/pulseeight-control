@@ -11,6 +11,7 @@ public struct FakeMatrixTransport: HTTPTransport {
     }
 
     public func send(_ request: HTTPRequest) async throws -> HTTPResponse {
+        if matrix.isOffline { throw TransportError("The matrix is restarting", isConnectionDrop: true) }
         if matrix.options.latency > 0 {
             try? await Task.sleep(nanoseconds: UInt64(matrix.options.latency * 1_000_000_000))
         }

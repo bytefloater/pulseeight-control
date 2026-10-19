@@ -44,6 +44,7 @@ Request `{"cmd": "...", ...}`; response `{"ok":true}` (plus `"value"` for `valid
 | `selectMatrix` | `id`: the matrix to show. Stops talking to the current one and connects to this one. |
 | `removeMatrix` | `id`. Also forgets its admin password. If it was selected, the first remaining matrix is. |
 | `saveSettings` | The single-matrix form, kept for older callers: saves the **selected** matrix (adding one if there is none), keeping its name. Same fields as `saveMatrix` minus `id`, `name` and `clearAdminPassword`. |
+| `restart` | Restarts the selected matrix (admin only; fails without a saved admin password). The matrix does it **the moment it is asked, with no confirmation of its own**, and everything routed through it is interrupted for about a minute, so the command refuses unless the request has `"confirmed": true`: ask the person first, and only then send it. It is sent once and never retried. Afterwards the matrix is unreachable until it has started again; polling carries on and the connection returns by itself. |
 | `removeAdminPassword` | Forgets the selected matrix's admin password. |
 | `setAppearance` | `value`: `system`, `light`, `dark` |
 | `setLanguage` | `value`: a code from the snapshot's `languages`, or `system` |
@@ -53,7 +54,7 @@ Request `{"cmd": "...", ...}`; response `{"ok":true}` (plus `"value"` for `valid
 | `validatePortName` | `name`; returns the trimmed name in `value` |
 | `discover` | no fields. Asks gotomymatrix.com which matrix is on this network (needs internet). Returns `{"host":"192.168.1.50","port":80}` as text in `value`, or no `value` if it knows of none. Changes no setting: show the answer, then send `saveSettings` if the user accepts it. Only private-network addresses are accepted. |
 
-Admin-gated commands (`renamePort`, `setEdid`, `setBacklight`, `setStatusLed`) fail with a message
+Admin-gated commands (`renamePort`, `setEdid`, `setBacklight`, `setStatusLed`, `restart`) fail with a message
 if no admin password is saved.
 
 ## Snapshot

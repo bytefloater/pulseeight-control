@@ -79,40 +79,48 @@ struct ConnectionPanel: View {
 
     var body: some View {
         Group {
-            switch model.displayPhase {
-            case .notConfigured:
-                ContentUnavailableView {
-                    Label("No matrix configured", systemImage: "network.slash")
-                } description: {
-                    Text("Find your NeoMatrix on this network, or enter its IP address in Settings.")
-                    if let error = model.discoveryError { Text(error).foregroundStyle(.red) }
-                } actions: {
-                    Button(model.discovering ? "Looking…" : "Find Matrix") { Task { await model.findAndConnect() } }
-                        .disabled(model.discovering)
-                        .buttonStyle(.borderedProminent)
-                    Button("Open Settings") { openSettings() }
-                }
-            case .connecting:
+            if model.isRestarting {
                 VStack(spacing: 8) {
-                    ProgressView("Connecting to \(model.hostLabel)…")
-                    if model.localNetwork.state == .asking {
-                        Text("macOS is asking whether PulseEight Control may use the local network. Choose Allow.")
-                            .foregroundStyle(.secondary)
+                    ProgressView("Restarting \(model.hostLabel)…")
+                    Text("This takes about a minute. PulseEight Control reconnects by itself.")
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                switch model.displayPhase {
+                case .notConfigured:
+                    ContentUnavailableView {
+                        Label("No matrix configured", systemImage: "network.slash")
+                    } description: {
+                        Text("Find your NeoMatrix on this network, or enter its IP address in Settings.")
+                        if let error = model.discoveryError { Text(error).foregroundStyle(.red) }
+                    } actions: {
+                        Button(model.discovering ? "Looking…" : "Find Matrix") { Task { await model.findAndConnect() } }
+                            .disabled(model.discovering)
+                            .buttonStyle(.borderedProminent)
+                        Button("Open Settings") { openSettings() }
                     }
+                case .connecting:
+                    VStack(spacing: 8) {
+                        ProgressView("Connecting to \(model.hostLabel)…")
+                        if model.localNetwork.state == .asking {
+                            Text("macOS is asking whether PulseEight Control may use the local network. Choose Allow.")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                case .disconnected(let reason):
+                    ContentUnavailableView {
+                        Label("Can't reach the matrix", systemImage: "exclamationmark.triangle")
+                    } description: {
+                        Text("No response from \(model.hostLabel).")
+                        if let reason { Text(reason) }
+                    } actions: {
+                        Button(model.retrying ? "Retrying…" : "Retry now") { model.retry() }
+                            .disabled(model.retrying)
+                        Button("Open Settings") { openSettings() }
+                    }
+                case .connected:
+                    EmptyView()
                 }
-            case .disconnected(let reason):
-                ContentUnavailableView {
-                    Label("Can't reach the matrix", systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text("No response from \(model.hostLabel).")
-                    if let reason { Text(reason) }
-                } actions: {
-                    Button(model.retrying ? "Retrying…" : "Retry now") { model.retry() }
-                        .disabled(model.retrying)
-                    Button("Open Settings") { openSettings() }
-                }
-            case .connected:
-                EmptyView()
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

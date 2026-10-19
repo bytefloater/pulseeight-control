@@ -28,6 +28,17 @@ struct RootView: View {
         .sheet(isPresented: sheetBinding) {
             PortDetailSheet(model: model)
         }
+        .alert("Restart \(model.hostLabel)?", isPresented: $model.confirmingRestart) {
+            Button("Restart", role: .destructive) { model.restartMatrix() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The matrix goes offline for about a minute and everything routed through it is interrupted: displays lose their picture until it is back. PulseEight Control reconnects by itself.")
+        }
+        .alert("Couldn't restart the matrix", isPresented: restartErrorBinding) {
+            Button("OK") {}
+        } message: {
+            Text(model.restartError ?? "")
+        }
         .task {
             if model.phase == .notConfigured { openConnections() }
         }
@@ -35,13 +46,14 @@ struct RootView: View {
     }
 
     private func openConnections() {
-        model.settingsPane = .connections
+        // (P8_SETTINGS_PANE, a development switch, keeps its own pane.)
+        if ProcessInfo.processInfo.environment["P8_SETTINGS_PANE"] == nil { model.settingsPane = .connections }
         openSettings()
     }
 
     @ViewBuilder
     private var content: some View {
-        if model.phase != .connected {
+        if model.phase != .connected || model.isRestarting {
             ConnectionPanel(model: model)
         } else {
             switch model.page {
@@ -49,6 +61,10 @@ struct RootView: View {
             case .hardware: HardwarePage(model: model)
             }
         }
+    }
+
+    private var restartErrorBinding: Binding<Bool> {
+        Binding(get: { model.restartError != nil }, set: { if !$0 { model.restartError = nil } })
     }
 
     private var sheetBinding: Binding<Bool> {

@@ -283,6 +283,12 @@ public final class AppCore: @unchecked Sendable {
         try await perform { try await $0.setEdidProfile(bay: bay, profile: profile) }
     }
 
+    /// Restarts the selected matrix. Admin only. The matrix does it the moment it is asked, so the caller has to
+    /// have confirmed with the person first; the apps do, and the JSON command refuses without `confirmed`.
+    public func restartMatrix() async throws {
+        try await perform { try await $0.restart() }
+    }
+
     public func setBacklight(_ level: BacklightLevel) async throws {
         try await perform { try await $0.setBacklight(level) }
     }

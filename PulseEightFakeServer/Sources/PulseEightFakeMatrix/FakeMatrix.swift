@@ -3,6 +3,7 @@ import Foundation
 /// In-memory stand-in for a NeoMatrix. Serves every endpoint PulseEightKit uses:
 ///
 ///     GET  /System/Details, /system/features, /System/Health
+///     GET  /System/Restart                               (admin; offline for Options.restartOutage)
 ///     GET  /Port/List
 ///     GET  /Port/Details/{Input|Output}/{bay}
 ///     GET  /Port/Set/{input}/{output}
@@ -22,11 +23,14 @@ public final class FakeMatrix: @unchecked Sendable {
         public var password: String?
         /// Seconds added to every reply, to see pending states in a UI.
         public var latency: TimeInterval
+        /// Seconds the matrix stays unreachable after a restart (a real one takes about a minute).
+        public var restartOutage: TimeInterval
 
-        public init(bays: Int = 8, password: String? = nil, latency: TimeInterval = 0) {
+        public init(bays: Int = 8, password: String? = nil, latency: TimeInterval = 0, restartOutage: TimeInterval = 0) {
             self.bays = max(1, bays)
             self.password = password
             self.latency = latency
+            self.restartOutage = max(0, restartOutage)
         }
     }
 
@@ -47,8 +51,10 @@ public final class FakeMatrix: @unchecked Sendable {
     private var loggedIn = false
     private var backlight = "High"
     private var statusLED = "On"
-    /// For the uptime the health report gives.
-    private let started = Date()
+    /// For the uptime the health report gives; a restart starts it again.
+    private var started = Date()
+    private var offlineUntil: Date?
+    private var restarts = 0
     private var inputs: [Input]
     private var outputs: [Output]
 
@@ -64,6 +70,13 @@ public final class FakeMatrix: @unchecked Sendable {
         outputs[0].name = "Lounge TV"
         if bays > 1 { outputs[1].name = "Bedroom TV" }
     }
+
+    /// How many times the matrix has been restarted.
+    public var restartCount: Int { lock.locked { restarts } }
+
+    /// True while a restart has the matrix unreachable: the transports then fail or drop the connection
+    /// instead of answering.
+    public var isOffline: Bool { lock.locked { offlineUntil.map { $0 > Date() } ?? false } }
 
     /// Handles one request. Returns nil for an unknown path (the server answers 404).
     /// The path is the URL path only, without the query.
@@ -86,6 +99,13 @@ public final class FakeMatrix: @unchecked Sendable {
             case ("system", "details"): return details()
             case ("system", "features"): return features()
             case ("system", "health"): return health()
+            case ("system", "restart"):
+                if let denied = requireAdmin() { return denied }
+                restarts += 1
+                started = Date()
+                loggedIn = false // the matrix forgets who was logged in when it starts again
+                if options.restartOutage > 0 { offlineUntil = Date().addingTimeInterval(options.restartOutage) }
+                return ["Result": true]
             case ("port", "list"): return portList()
             default: return nil
             }

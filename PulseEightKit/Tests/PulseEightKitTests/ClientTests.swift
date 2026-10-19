@@ -92,6 +92,47 @@ import Testing
         try await makeAdmin(transport).renamePort(mode: .input, bay: 0, name: "ABCDEFGHIJKLM", password: "x")
     }
 
+    // MARK: Restart. Every test here runs against a mock: nothing may ever restart a real matrix.
+
+    @Test func restartLogsInThenAsksForTheRestartOnceAndNeverRetriesIt() async throws {
+        let transport = MockTransport.device()
+        try await makeAdmin(transport).restart(password: "hunter2")
+
+        #expect(transport.summary == ["POST /Account/Login", "GET /System/Restart"])
+        #expect(transport.requests.last?.retryOnDrop == false, "a restart must not be sent twice by a transport's own retry")
+    }
+
+    @Test func aConnectionDroppedAsTheMatrixGoesDownMeansItIsRestarting() async throws {
+        let device = MockTransport.device()
+        let transport = MockTransport { request in
+            request.url.path == "/System/Restart"
+                ? .failure(TransportError("lost", isConnectionDrop: true)) : device.handlerResponse(for: request)
+        }
+        try await makeAdmin(transport).restart(password: "x")
+        #expect(transport.summary == ["POST /Account/Login", "GET /System/Restart"])
+    }
+
+    @Test func aRefusalIsAnErrorNotARestart() async throws {
+        let device = MockTransport.device()
+        for failure: Result<HTTPResponse, TransportError> in [
+            .failure(TransportError("The Internet connection appears to be offline.")),   // not reachable at all
+            .failure(TransportError("timed out", isTimeout: true)),
+            MockTransport.reply("", status: 500),
+            MockTransport.reply(#"{"Result":false,"Message":"Not allowed"}"#),
+        ] {
+            let transport = MockTransport { request in
+                request.url.path == "/System/Restart" ? failure : device.handlerResponse(for: request)
+            }
+            await #expect(throws: MatrixError.self) { try await makeAdmin(transport).restart(password: "x") }
+        }
+    }
+
+    @Test func aFailedLoginStopsBeforeTheRestart() async throws {
+        let transport = MockTransport { _ in MockTransport.reply(#"{"Result":false,"Message":"Wrong password"}"#) }
+        await #expect(throws: MatrixError.admin("Wrong password")) { try await makeAdmin(transport).restart(password: "bad") }
+        #expect(transport.summary == ["POST /Account/Login"])
+    }
+
     @Test func edidIsAGetAfterLogin() async throws {
         let transport = MockTransport.device()
         try await makeAdmin(transport).setEdidProfile(bay: 3, profile: 102, password: "x")

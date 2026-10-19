@@ -151,13 +151,37 @@ final class AppModel {
     private(set) var inGracePeriod = false
     private var graceTask: Task<Void, Never>?
 
-    init(core: AppCore = AppCore(), localNetwork: LocalNetworkPermission? = nil, connectionGrace: Duration = .seconds(5)) {
+    /// Set to ask "Restart the matrix?" (see `requestRestart`).
+    var confirmingRestart = false
+    /// Why the last restart didn't start, for an alert.
+    var restartError: String?
+    /// True from the moment a restart was sent until the matrix has gone away and come back.
+    private(set) var isRestarting = false
+    private var restartTask: Task<Void, Never>?
+    private var restartSawMatrixGo = false
+    /// How long to wait for the matrix to be seen going away before deciding the restart didn't happen. The
+    /// connection counts as live for up to 15 seconds after the matrix stops answering, so this must be longer.
+    let restartWatch: Duration
+    /// The longest to show "Restarting" for. A real restart takes about a minute.
+    let restartLimit: Duration
+
+    init(
+        core: AppCore = AppCore(), localNetwork: LocalNetworkPermission? = nil, connectionGrace: Duration = .seconds(5),
+        restartWatch: Duration = .seconds(45), restartLimit: Duration = .seconds(180)
+    ) {
         let localNetwork = localNetwork ?? LocalNetworkPermission()
         self.core = core
         self.connectionGrace = connectionGrace
+        self.restartWatch = restartWatch
+        self.restartLimit = restartLimit
         self.localNetwork = localNetwork
         settings = core.settings
         phase = core.phase
+        // Development switches, like P8_CONFIG_DIR: open on a given page or Settings pane (to look at one without
+        // clicking to it).
+        let environment = ProcessInfo.processInfo.environment
+        if let name = environment["P8_START_PAGE"], let start = Page(rawValue: name) { page = start }
+        if let name = environment["P8_SETTINGS_PANE"], let pane = SettingsPane(rawValue: name) { settingsPane = pane }
         localNetwork.onGranted = { [weak self] in self?.localNetworkGranted() }
     }
 
@@ -165,12 +189,14 @@ final class AppModel {
 
     /// What the screen shows: a failure that is still inside its grace period counts as still connecting.
     var displayPhase: ConnectionPhase {
+        if isRestarting { return .connecting }
         if inGracePeriod, case .disconnected = phase { return .connecting }
         return phase
     }
 
     var connectionSummary: String {
-        displayPhase == phase ? core.connectionSummary : core.strings.text(.connectionConnecting, core.hostLabel)
+        if isRestarting { return "Restarting \(core.hostLabel)…" }
+        return displayPhase == phase ? core.connectionSummary : core.strings.text(.connectionConnecting, core.hostLabel)
     }
     var hostLabel: String { core.hostLabel }
 
@@ -179,7 +205,8 @@ final class AppModel {
 
     /// Short form for the window chrome; the host is in Settings.
     var connectionShort: String {
-        switch displayPhase {
+        if isRestarting { return "Restarting…" }
+        return switch displayPhase {
         case .connected: "Connected"
         case .connecting: "Connecting…"
         case .notConfigured: "Not configured"
@@ -254,6 +281,7 @@ final class AppModel {
         if update.settings != settings { settings = update.settings }
         if update.phase != phase { phase = update.phase }
         if update.phase == .connected { endConnectionGrace() }
+        watchRestart(update)
         if update.adminConfigured != adminConfigured { adminConfigured = update.adminConfigured }
     }
 
@@ -390,6 +418,63 @@ final class AppModel {
         core.setAppearance(appearance)
     }
 
+    // MARK: Restart
+
+    /// Starts the restart question (only for an admin: the matrix needs the password). The matrix restarts the moment
+    /// it is asked, with no confirmation of its own, so nothing sends the request until `restartMatrix`, which only
+    /// the alert's Restart button calls.
+    @discardableResult
+    func requestRestart() -> Bool {
+        guard adminConfigured, !isRestarting else { return false }
+        confirmingRestart = true
+        return true
+    }
+
+    /// Sends the restart. Called once the person has said yes.
+    func restartMatrix() {
+        confirmingRestart = false
+        guard adminConfigured, !isRestarting else { return }
+        restartError = nil
+        Task {
+            do {
+                try await core.restartMatrix()
+                beginRestartWait()
+            } catch {
+                restartError = error.localizedDescription
+            }
+        }
+    }
+
+    /// From now until the matrix has gone away and come back, the window says it is restarting instead of
+    /// showing an error.
+    private func beginRestartWait() {
+        isRestarting = true
+        restartSawMatrixGo = false
+        restartTask?.cancel()
+        restartTask = Task { [restartWatch, restartLimit] in
+            try? await Task.sleep(for: restartWatch)
+            // Never seen going away: it didn't restart after all (or came back before a poll noticed).
+            if !Task.isCancelled, !restartSawMatrixGo { endRestart(); return }
+            try? await Task.sleep(for: restartLimit)
+            if !Task.isCancelled { endRestart() }
+        }
+    }
+
+    private func endRestart() {
+        restartTask?.cancel()
+        if isRestarting { isRestarting = false }
+    }
+
+    private func watchRestart(_ update: CoreUpdate) {
+        guard isRestarting else { return }
+        let reachable = update.phase == .connected && update.state?.status.error == nil
+        if !reachable {
+            restartSawMatrixGo = true
+        } else if restartSawMatrixGo {
+            endRestart()
+        }
+    }
+
     // MARK: Matrices
 
     /// Fills the popover's fields: from the matrix `id`, or empty to add one.
@@ -441,6 +526,8 @@ final class AppModel {
 
     /// What was in flight for the matrix just left means nothing to the next one.
     private func resetPerMatrixState() {
+        endRestart()
+        confirmingRestart = false
         pendingRoutes = []
         selectedPort = nil
         backlightPending = nil

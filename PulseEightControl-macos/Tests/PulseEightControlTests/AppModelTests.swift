@@ -51,7 +51,8 @@ struct Harness {
     /// A model over an in-process fake, started and (unless `host` is nil) connected.
     static func make(
         host: String? = "10.0.0.5", password: String? = "secret", savedAdminPassword: String? = "secret", bays: Int = 4,
-        connect: Bool = true, unreachable: Bool = false, connectionGrace: Duration = .zero
+        connect: Bool = true, unreachable: Bool = false, connectionGrace: Duration = .zero,
+        restartOutage: TimeInterval = 0, restartWatch: Duration = .seconds(45)
     ) async -> Harness {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("p8app-\(UUID().uuidString)")
         let url = directory.appendingPathComponent("settings.json")
@@ -62,12 +63,12 @@ struct Harness {
             settings.selectedMatrixID = matrixID
             try? settings.save(to: url)
         }
-        let matrix = FakeMatrix(.init(bays: bays, password: password))
+        let matrix = FakeMatrix(.init(bays: bays, password: password, restartOutage: restartOutage))
         let transport = RecordingTransport(FakeMatrixTransport(matrix))
         transport.failing = unreachable // decided before the first poll, so there is no race with it
         let secrets = MemorySecrets(savedAdminPassword.map { [AppCore.adminAccount(for: matrixID): $0] } ?? [:])
         let core = AppCore(secrets: secrets, settingsURL: url, makeTransport: { _ in transport })
-        let model = AppModel(core: core, localNetwork: .disabled, connectionGrace: connectionGrace)
+        let model = AppModel(core: core, localNetwork: .disabled, connectionGrace: connectionGrace, restartWatch: restartWatch)
         let harness = Harness(model: model, matrix: matrix, transport: transport, secrets: secrets, settingsURL: url, matrixID: matrixID)
         await model.start()
         if connect && host != nil {
@@ -443,5 +444,76 @@ func waitUntil(timeout: TimeInterval = 6, _ condition: @MainActor () -> Bool) as
         #expect(await waitUntil { !h.model.settings.highlightGrid && !h.model.settings.showStatusBar })
         let saved = AppSettings.load(from: h.settingsURL)
         #expect(!saved.highlightGrid && !saved.showStatusBar)
+    }
+}
+
+/// Every test here runs against the in-process fake matrix: nothing may restart a real one.
+@MainActor
+@Suite struct RestartTests {
+    @Test func askingToRestartOnlyRaisesTheQuestion() async throws {
+        let h = await Harness.make()
+        #expect(h.model.requestRestart())
+        #expect(h.model.confirmingRestart)
+        #expect(h.matrix.restartCount == 0, "nothing is sent until the person confirms")
+        #expect(!h.model.isRestarting)
+    }
+
+    @Test func withoutAnAdminPasswordThereIsNothingToConfirm() async throws {
+        let h = await Harness.make(savedAdminPassword: nil)
+        #expect(!h.model.requestRestart())
+        #expect(!h.model.confirmingRestart)
+        h.model.restartMatrix()
+        try await Task.sleep(nanoseconds: 200_000_000)
+        #expect(h.matrix.restartCount == 0)
+    }
+
+    @Test func confirmingSendsTheRestartOnce() async throws {
+        let h = await Harness.make(restartWatch: .milliseconds(300))
+        h.model.requestRestart()
+        h.model.restartMatrix()
+        #expect(!h.model.confirmingRestart)
+        #expect(await waitUntil { h.model.isRestarting })
+        #expect(await waitUntil { h.matrix.restartCount == 1 })
+
+        h.model.restartMatrix() // pressed again while it is restarting
+        try await Task.sleep(nanoseconds: 200_000_000)
+        #expect(h.matrix.restartCount == 1)
+    }
+
+    @Test func whileRestartingTheWindowSaysSoInsteadOfAnError() async throws {
+        let h = await Harness.make(restartOutage: 1.5)
+        h.model.restartMatrix()
+        #expect(await waitUntil { h.model.isRestarting })
+        #expect(h.model.displayPhase == .connecting)
+        #expect(h.model.connectionShort == "Restarting…")
+        #expect(h.model.connectionSummary.hasPrefix("Restarting"))
+    }
+
+    @Test func itIsRestartingUntilTheMatrixHasGoneAwayAndComeBack() async throws {
+        let h = await Harness.make(restartOutage: 1.5)
+        h.model.restartMatrix()
+        #expect(await waitUntil { h.model.isRestarting })
+
+        // Unreachable for the outage, then answering again: the restart is over.
+        #expect(await waitUntil(timeout: 12) { !h.model.isRestarting })
+        #expect(await waitUntil { h.model.phase == .connected })
+        #expect(h.model.displayPhase == .connected)
+        #expect(h.matrix.restartCount == 1)
+    }
+
+    @Test func aRestartThatNeverTakesEffectStopsBeingShownAsOne() async throws {
+        let h = await Harness.make(restartWatch: .milliseconds(400)) // the fake stays reachable throughout
+        h.model.restartMatrix()
+        #expect(await waitUntil { h.model.isRestarting })
+        #expect(await waitUntil(timeout: 8) { !h.model.isRestarting })
+        #expect(h.model.phase == .connected)
+    }
+
+    @Test func aRefusedRestartIsReportedAndNeverLooksLikeOne() async throws {
+        let h = await Harness.make(password: "right", savedAdminPassword: "wrong")
+        h.model.restartMatrix()
+        #expect(await waitUntil { h.model.restartError != nil })
+        #expect(!h.model.isRestarting)
+        #expect(h.matrix.restartCount == 0)
     }
 }

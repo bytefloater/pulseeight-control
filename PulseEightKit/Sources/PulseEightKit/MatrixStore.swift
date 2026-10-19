@@ -277,6 +277,14 @@ public actor MatrixStore {
         spawn { await $0.refreshDetails() }
     }
 
+    /// Restarts the matrix (admin only). It goes unreachable for about a minute; polling carries on and the
+    /// connection comes back by itself.
+    public func restart() async throws {
+        let (admin, password) = try requireAdmin()
+        Diagnostics.note("Restarting the matrix at \(config.host ?? "?"):\(config.port) (asked by the person using the app)")
+        try await admin.restart(password: password)
+    }
+
     public func setBacklight(_ level: BacklightLevel) async throws {
         let (admin, password) = try requireAdmin()
         try await admin.setBacklight(level, password: password)

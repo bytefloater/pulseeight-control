@@ -150,6 +150,22 @@ import Testing
         #expect(recovered?.systemError == nil)
     }
 
+    @Test func restartNeedsTheAdminPasswordAndSendsNothingWithoutIt() async throws {
+        let (store, transport, _, _) = makeStore(config: MatrixConfig(host: "10.0.0.5", pollInterval: 60, detailPollInterval: 60), password: nil)
+        await store.start()
+        await #expect(throws: MatrixError.admin("Admin password is not set")) { try await store.restart() }
+        await store.stop()
+        #expect(!transport.summary.contains("GET /System/Restart"))
+    }
+
+    @Test func restartIsSentOnceWithTheAdminPassword() async throws {
+        let (store, transport, _, _) = makeStore(config: MatrixConfig(host: "10.0.0.5", pollInterval: 60, detailPollInterval: 60))
+        await store.start()
+        try await store.restart()
+        await store.stop()
+        #expect(transport.summary.filter { $0 == "GET /System/Restart" }.count == 1)
+    }
+
     @Test func connectionGoesStaleAfterThreePollsOrFifteenSeconds() async throws {
         let (store, _, clock, recorder) = makeStore(config: MatrixConfig(host: "h", pollInterval: 2))
         await store.start()

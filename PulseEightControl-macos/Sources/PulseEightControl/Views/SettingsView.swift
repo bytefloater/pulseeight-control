@@ -38,6 +38,13 @@ struct SettingsView: View {
         Section("Connection") {
             TextField("Host", text: $model.draft.host, prompt: Text("192.168.1.150"))
                 .multilineTextAlignment(.trailing)
+            LabeledContent {
+                Button(model.discovering ? "Looking…" : "Find Matrix") { Task { await model.findMatrixForSettings() } }
+                    .disabled(model.discovering)
+            } label: {
+                Text("Don't know the address?")
+                    .foregroundStyle(.secondary)
+            }
             TextField("Port", text: $model.draft.port, prompt: Text("80"))
                 .multilineTextAlignment(.trailing)
             TextField("Timeout (seconds)", text: $model.draft.timeout, prompt: Text("10"))

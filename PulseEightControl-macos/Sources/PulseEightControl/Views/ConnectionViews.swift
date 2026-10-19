@@ -84,8 +84,12 @@ struct ConnectionPanel: View {
                 ContentUnavailableView {
                     Label("No matrix configured", systemImage: "network.slash")
                 } description: {
-                    Text("Enter your NeoMatrix's IP address in Settings to get started.")
+                    Text("Find your NeoMatrix on this network, or enter its IP address in Settings.")
+                    if let error = model.discoveryError { Text(error).foregroundStyle(.red) }
                 } actions: {
+                    Button(model.discovering ? "Looking…" : "Find Matrix") { Task { await model.findAndConnect() } }
+                        .disabled(model.discovering)
+                        .buttonStyle(.borderedProminent)
                     Button("Open Settings") { openSettings() }
                 }
             case .connecting:

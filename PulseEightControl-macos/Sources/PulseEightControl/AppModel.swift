@@ -116,6 +116,10 @@ final class AppModel {
     /// Result of the last Settings save: (text, isError).
     var settingsMessage: (text: String, isError: Bool)?
     var retrying = false
+    /// True while gotomymatrix.com is being asked where the matrix is.
+    var discovering = false
+    /// Why the last "Find Matrix" on the connection screen found nothing.
+    var discoveryError: String?
     /// Routes sent to the matrix that haven't been confirmed by a poll yet.
     var pendingRoutes: Set<RouteKey> = []
     /// Set when a route request fails; the Routing page shows it in an alert.
@@ -334,6 +338,42 @@ final class AppModel {
         draft.host = draft.host.trimmingCharacters(in: .whitespacesAndNewlines)
         draft.adminPassword = ""
         settingsMessage = ("Saved.", false)
+    }
+
+    /// Asks the discovery service for the matrix on this network. Nil (with `message` set) if it found none.
+    private func discover(reportingTo report: (String) -> Void) async -> DiscoveredMatrix? {
+        discovering = true
+        defer { discovering = false }
+        do {
+            if let found = try await core.discoverMatrix() { return found }
+            report("No matrix found on this network. Check that its monitoring LED is solid green and that this Mac is on the same network as the matrix.")
+        } catch {
+            report(error.localizedDescription)
+        }
+        return nil
+    }
+
+    /// Settings: fills in Host and Port from what was found. Nothing is saved until Apply.
+    func findMatrixForSettings() async {
+        settingsMessage = nil
+        guard let found = await discover(reportingTo: { settingsMessage = ($0, true) }) else { return }
+        draft.host = found.host
+        draft.port = String(found.port)
+        settingsMessage = ("Found a matrix at \(found.host). Press Apply to use it.", false)
+    }
+
+    /// Connection screen: connects to what was found straight away, keeping the other saved settings.
+    func findAndConnect() async {
+        discoveryError = nil
+        guard let found = await discover(reportingTo: { discoveryError = $0 }) else { return }
+        var saved = SettingsDraft(core.settings)
+        saved.host = found.host
+        saved.port = String(found.port)
+        do {
+            try core.saveSettings(saved.input)
+        } catch {
+            discoveryError = error.localizedDescription
+        }
     }
 
     func removeAdminPassword() {

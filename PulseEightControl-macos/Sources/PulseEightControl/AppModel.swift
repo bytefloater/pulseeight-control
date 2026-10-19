@@ -121,6 +121,8 @@ final class AppModel {
     /// Why the popover's Save (or Find Matrix) didn't work, or what it found.
     var matrixMessage: (text: String, isError: Bool)?
     var page: Page = .routing
+    /// The Hardware topic being shown; nil is the list of topics.
+    var hardwareTopic: HardwareTopic?
     var settingsPane: SettingsPane = .connections
     var retrying = false
     /// True while gotomymatrix.com is being asked where the matrix is.
@@ -181,6 +183,7 @@ final class AppModel {
         // clicking to it).
         let environment = ProcessInfo.processInfo.environment
         if let name = environment["P8_START_PAGE"], let start = Page(rawValue: name) { page = start }
+        if let name = environment["P8_HARDWARE_TOPIC"], let topic = HardwareTopic(rawValue: name) { hardwareTopic = topic }
         if let name = environment["P8_SETTINGS_PANE"], let pane = SettingsPane(rawValue: name) { settingsPane = pane }
         localNetwork.onGranted = { [weak self] in self?.localNetworkGranted() }
     }
@@ -527,6 +530,7 @@ final class AppModel {
     /// What was in flight for the matrix just left means nothing to the next one.
     private func resetPerMatrixState() {
         endRestart()
+        hardwareTopic = nil
         confirmingRestart = false
         pendingRoutes = []
         selectedPort = nil

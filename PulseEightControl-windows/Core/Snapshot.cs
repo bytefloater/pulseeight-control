@@ -5,12 +5,23 @@ namespace PulseEight.Core;
 
 // The JSON contract of p8_snapshot (schema 1); see docs/core-interface.md.
 
-public sealed record LabeledValue(string Label, string Value);
+/// <summary>A label and its text. Health rows also say whether the thing is in good order (<see cref="Ok"/>; null when the
+/// matrix makes no judgement) and which <see cref="Group"/> they belong to: "health" or "diagnostics".</summary>
+public sealed record LabeledValue(string Label, string Value, bool? Ok = null, string? Group = null);
 
 public sealed record SettingsSnapshot(
     string Appearance, bool HighlightGrid, bool ShowStatusBar,
     string? Host, int Port, int Timeout, int PollInterval, int DetailPollInterval,
     string Language = "system", bool CheckForUpdates = true);
+
+/// <summary>One configured matrix. The admin password itself is never part of a snapshot.</summary>
+public sealed record MatrixSnapshot(
+    string Id, string Name, string DisplayName, string? Host, int Port,
+    int Timeout, int PollInterval, int DetailPollInterval, bool AdminPasswordSaved, bool Selected)
+{
+    /// <summary>The address as the person types it: host, with ":port" when it isn't 80.</summary>
+    public string Address => Host is { Length: > 0 } ? (Port == 80 ? Host : $"{Host}:{Port}") : "";
+}
 
 public sealed record LanguageSnapshot(string Code, string Name);
 
@@ -39,7 +50,17 @@ public sealed record Snapshot(
 {
     public const int SupportedSchema = 1;
 
+    // Added with several matrices and the health report; a snapshot without them reads as none.
+    /// <summary>Every configured matrix, in the order added.</summary>
+    public IReadOnlyList<MatrixSnapshot> Matrices { get; init; } = [];
+    /// <summary>The matrix's own health report, as rows; empty until it loads and for firmware without one.</summary>
+    public IReadOnlyList<LabeledValue> HealthRows { get; init; } = [];
+    /// <summary>Why the system details couldn't be loaded (they are missing while this is set).</summary>
+    public string? SystemError { get; init; }
+
     public bool IsConnected => Phase == "connected";
+
+    public MatrixSnapshot? SelectedMatrix => Matrices.FirstOrDefault(m => m.Selected);
 
     internal static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -65,3 +86,6 @@ public sealed record CommandResult(bool Ok, string? Error = null, string? Value 
         return new CommandResult(ok, Text("error"), Text("value"));
     }
 }
+
+/// <summary>What <see cref="CoreClient.DiscoverAsync"/> found.</summary>
+public sealed record DiscoveredMatrix(string Host, int Port);

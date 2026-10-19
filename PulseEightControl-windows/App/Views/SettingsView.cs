@@ -5,46 +5,37 @@ using PulseEightControl.Updates;
 
 namespace PulseEightControl.Views;
 
-/// <summary>Matrix address, admin password and appearance. Appearance applies at once; the
-/// connection details are saved together with the button.</summary>
+/// <summary>The list of matrices (pick one to show it; add, edit and remove them in a dialog), then
+/// appearance and updates. Everything but the matrix dialog applies at once.</summary>
 internal sealed class SettingsView : UserControl
 {
     private static readonly string[] Appearances = ["system", "light", "dark"];
 
     private readonly CoreClient _core;
     private readonly UpdateController _updates;
-    private readonly TextBox _host = new() { Width = 200, PlaceholderText = "192.168.1.150" };
-    private readonly TextBox _port = new() { Width = 120 };
-    private readonly TextBox _timeout = new() { Width = 120 };
-    private readonly TextBox _poll = new() { Width = 120 };
-    private readonly TextBox _detailPoll = new() { Width = 120 };
-    private readonly PasswordBox _password = new() { Width = 260 };
-    private readonly Button _removePassword = new() { Content = Loc.T("settings.removePassword") };
-    private readonly Button _save = new() { Content = Loc.T("settings.save") };
-    private readonly TextBlock _message = Ui.Text("", "CaptionTextBlockStyle", wrap: true);
+    private readonly Action _connectionChanged;
+    private readonly StackPanel _matrixList = new();
+    private readonly Button _addMatrix = new() { Content = Loc.T("settings.connections.add") };
+    private string _matricesSignature = "";
     private readonly ComboBox _appearance = new() { MinWidth = 140 };
     private readonly ComboBox _language = new() { MinWidth = 140 };
     private readonly List<string> _languageCodes = []; // parallel to _language.Items: "system", then each language
     private readonly ToggleSwitch _highlight = new() { OnContent = "", OffContent = "", MinWidth = 0 };
     private readonly ToggleSwitch _statusBar = new() { OnContent = "", OffContent = "", MinWidth = 0 };
-    private readonly TextBlock _passwordNote = Ui.Text("", "CaptionTextBlockStyle", secondary: true, wrap: true);
     private readonly ToggleSwitch _autoUpdates = new() { OnContent = "", OffContent = "", MinWidth = 0 };
     private readonly Button _checkNow = new() { Content = Loc.T("settings.updates.checkNow") };
     private readonly TextBlock _updateStatus = Ui.Text("", "CaptionTextBlockStyle", secondary: true, wrap: true);
 
     private bool _loading;
-    private bool _loadedOnce;
+    private Snapshot? _snapshot;
 
-    public SettingsView(CoreClient core, UpdateController updates)
+    public SettingsView(CoreClient core, UpdateController updates, Action connectionChanged)
     {
         _core = core;
         _updates = updates;
+        _connectionChanged = connectionChanged;
         foreach (var key in new[] { "theme.system", "theme.light", "theme.dark" }) _appearance.Items.Add(Loc.T(key));
-        _password.PlaceholderText = Loc.T("settings.password.placeholder");
-
-        _save.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
-        _save.Click += async (_, _) => await SaveAsync();
-        _removePassword.Click += async (_, _) => await RemovePasswordAsync();
+        _addMatrix.Click += async (_, _) => await MatrixDialog.ShowAsync(_core, null, _connectionChanged);
         _appearance.SelectionChanged += async (_, _) =>
         {
             if (_loading || _appearance.SelectedIndex < 0) return;
@@ -66,27 +57,16 @@ internal sealed class SettingsView : UserControl
 
     private UIElement Build()
     {
-        var page = new StackPanel { Spacing = 4 };
+        var page = new StackPanel { Spacing = 8 };
         page.Children.Add(Ui.Header(Loc.T("settings.title")));
 
-        page.Children.Add(Ui.Columns(
-            Ui.Section(Loc.T("settings.matrix"), Ui.Card(
-                Ui.Row(Loc.T("settings.address"), _host, Loc.T("settings.address.caption")),
-                Ui.Row(Loc.T("settings.port"), _port))),
-            Ui.Section(Loc.T("settings.polling"), Ui.Card(
-                Ui.Row(Loc.T("settings.timeout"), _timeout, Loc.T("settings.timeout.caption")),
-                Ui.Row(Loc.T("settings.refresh"), _poll, Loc.T("settings.refresh.caption")),
-                Ui.Row(Loc.T("settings.detailInterval"), _detailPoll, Loc.T("settings.detailInterval.caption"))))));
-
-        page.Children.Add(Ui.Section(Loc.T("settings.administrator"), Ui.Card(
-            Ui.Row(Loc.T("settings.password"), _password, Loc.T("settings.password.caption")),
-            Ui.Row(Loc.T("settings.savedPassword"), _removePassword, null))));
-        page.Children.Add(_passwordNote);
-
-        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Margin = new Thickness(0, 8, 0, 0) };
-        actions.Children.Add(_save);
-        actions.Children.Add(_message);
-        page.Children.Add(actions);
+        var caption = Ui.Text(Loc.T("settings.connections.caption"), "CaptionTextBlockStyle", secondary: true, wrap: true);
+        caption.Margin = new Thickness(2, 0, 0, 0);
+        var add = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 0) };
+        add.Children.Add(_addMatrix);
+        page.Children.Add(Ui.Section(Loc.T("settings.connections"), _matrixList, first: true));
+        page.Children.Add(add);
+        page.Children.Add(caption);
 
         page.Children.Add(Ui.Section(Loc.T("settings.appearance"), Ui.Card(
             Ui.Row(Loc.T("settings.theme"), _appearance),
@@ -105,6 +85,7 @@ internal sealed class SettingsView : UserControl
     public void Apply(Snapshot snapshot)
     {
         _loading = true;
+        _snapshot = snapshot;
         try
         {
             var settings = snapshot.Settings;
@@ -123,17 +104,7 @@ internal sealed class SettingsView : UserControl
             _highlight.IsOn = settings.HighlightGrid;
             _statusBar.IsOn = settings.ShowStatusBar;
             _autoUpdates.IsOn = settings.CheckForUpdates;
-            _removePassword.IsEnabled = snapshot.AdminConfigured;
-            _passwordNote.Text = snapshot.AdminConfigured
-                ? Loc.T("settings.passwordSaved")
-                : Loc.T("settings.passwordNone");
-
-            // Don't overwrite what's being typed; fill the form once, and again after saving.
-            if (!_loadedOnce)
-            {
-                _loadedOnce = true;
-                Reload(settings);
-            }
+            ShowMatrices(snapshot);
         }
         finally { _loading = false; }
         ShowUpdateState();
@@ -154,52 +125,72 @@ internal sealed class SettingsView : UserControl
                   : Loc.T("settings.updates.neverChecked"));
     }
 
-    private void Reload(SettingsSnapshot settings)
+    /// <summary>The list of matrices, rebuilt only when something in it changed (it is rebuilt from every snapshot otherwise).</summary>
+    private void ShowMatrices(Snapshot snapshot)
     {
-        _host.Text = settings.Host ?? "";
-        _port.Text = settings.Port.ToString();
-        _timeout.Text = settings.Timeout.ToString();
-        _poll.Text = settings.PollInterval.ToString();
-        _detailPoll.Text = settings.DetailPollInterval.ToString();
-        _password.Password = "";
+        var signature = string.Join("|", snapshot.Matrices); // a record prints every field
+        if (signature == _matricesSignature) return;
+        _matricesSignature = signature;
+
+        _matrixList.Children.Clear();
+        if (snapshot.Matrices.Count == 0)
+        {
+            _matrixList.Children.Add(Ui.Card(Ui.Row(Loc.T("settings.connections.none"), "")));
+            return;
+        }
+        _matrixList.Children.Add(Ui.Card(snapshot.Matrices.Select(MatrixRow).ToArray()));
     }
 
-    private async Task SaveAsync()
+    /// <summary>One matrix: the tick and its name pick it, Edit opens its dialog.</summary>
+    private UIElement MatrixRow(MatrixSnapshot matrix)
     {
-        _save.IsEnabled = false;
-        _message.Text = "";
-        var result = await _core.SaveSettingsAsync(
-            _host.Text, _port.Text, _timeout.Text, _poll.Text, _detailPoll.Text, _password.Password);
-        _save.IsEnabled = true;
-        if (result.Ok)
+        var line = new Grid { ColumnSpacing = 12, MinHeight = Ui.RowMinHeight, Padding = Ui.RowPadding };
+        line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var names = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        names.Children.Add(Ui.Text(matrix.DisplayName));
+        if (matrix.DisplayName != matrix.Address)
+            names.Children.Add(Ui.Text(matrix.Address, "CaptionTextBlockStyle", secondary: true));
+
+        // A radio button is the standard way to say "this one of several", and is clear in both themes. It has no
+        // content of its own: a radio button puts its circle level with the first line of its content, and the
+        // circle belongs level with the middle of the name and address together.
+        var pick = new RadioButton
         {
-            _password.Password = "";
-            _message.Text = Loc.T("settings.saved");
-            _message.Foreground = Palette.Status(0);
-        }
+            GroupName = "matrices", MinWidth = 0, VerticalAlignment = VerticalAlignment.Center, IsChecked = matrix.Selected,
+        };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(pick, matrix.DisplayName);
+        ToolTipService.SetToolTip(pick, Loc.T(matrix.Selected ? "settings.connections.shown" : "settings.connections.show"));
+        pick.Checked += async (_, _) => await SelectAsync(matrix);
+        names.Background = Palette.Transparent; // so the whole name area takes the click
+        names.Tapped += async (_, _) => await SelectAsync(matrix);
+        Grid.SetColumn(names, 1);
+
+        var edit = new Button { Content = Loc.T("settings.connections.edit"), VerticalAlignment = VerticalAlignment.Center };
+        edit.Click += async (_, _) => await MatrixDialog.ShowAsync(_core, matrix, _connectionChanged);
+        Grid.SetColumn(edit, 2);
+
+        line.Children.Add(pick);
+        line.Children.Add(names);
+        line.Children.Add(edit);
+        return line;
+    }
+
+    private async Task SelectAsync(MatrixSnapshot matrix)
+    {
+        if (matrix.Selected) return;
+        var result = await _core.SelectMatrixAsync(matrix.Id);
+        if (result.Ok) _connectionChanged();
         else
         {
-            _message.Text = result.Error ?? Loc.T("settings.saveError");
-            _message.Foreground = Palette.Status(1);
+            await Dialogs.ErrorAsync(Loc.T("matrix.switchError"), result.Error);
+            if (_snapshot != null)
+            {
+                _matricesSignature = ""; // put the radio buttons back to what is really selected
+                ShowMatrices(_snapshot);
+            }
         }
-    }
-
-    private async Task RemovePasswordAsync()
-    {
-        var confirm = new ContentDialog
-        {
-            Title = Loc.T("settings.removeDialog.title"),
-            Content = Ui.Text(Loc.T("settings.removeDialog.body"), wrap: true),
-            PrimaryButtonText = Loc.T("common.remove"),
-            CloseButtonText = Loc.T("common.cancel"),
-            DefaultButton = ContentDialogButton.Close,
-        };
-        var removed = false;
-        confirm.PrimaryButtonClick += (_, _) => removed = true;
-        await Dialogs.ShowAsync(confirm);
-        if (!removed) return;
-
-        var result = await _core.RemoveAdminPasswordAsync();
-        if (!result.Ok) await Dialogs.ErrorAsync(Loc.T("settings.removeError"), result.Error);
     }
 }

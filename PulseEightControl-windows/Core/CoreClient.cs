@@ -96,6 +96,41 @@ public sealed class CoreClient : IDisposable
             ["adminPassword"] = adminPassword ?? "",
         });
 
+    /// <summary>Adds a matrix (<paramref name="id"/> null) or changes the one with that id; the new matrix's id
+    /// is in <see cref="CommandResult.Value"/>. Leave <paramref name="adminPassword"/> blank to keep the saved one.</summary>
+    public Task<CommandResult> SaveMatrixAsync(
+        string? id, string name, string host, string port, string timeout, string pollInterval, string detailPollInterval,
+        string? adminPassword, bool clearAdminPassword = false)
+    {
+        var fields = new Dictionary<string, object?>
+        {
+            ["name"] = name, ["host"] = host, ["port"] = port, ["timeout"] = timeout,
+            ["pollInterval"] = pollInterval, ["detailPollInterval"] = detailPollInterval,
+            ["adminPassword"] = adminPassword ?? "", ["clearAdminPassword"] = clearAdminPassword,
+        };
+        if (id != null) fields["id"] = id;
+        return CallAsync("saveMatrix", fields);
+    }
+
+    /// <summary>Stops talking to the current matrix and connects to this one.</summary>
+    public Task<CommandResult> SelectMatrixAsync(string id) =>
+        CallAsync("selectMatrix", new Dictionary<string, object?> { ["id"] = id });
+
+    /// <summary>Also forgets the matrix's admin password.</summary>
+    public Task<CommandResult> RemoveMatrixAsync(string id) =>
+        CallAsync("removeMatrix", new Dictionary<string, object?> { ["id"] = id });
+
+    /// <summary>Asks gotomymatrix.com which matrix is on this network. Null if it knows of none; throws
+    /// <see cref="InvalidOperationException"/> with a message ready to show if the lookup failed.
+    /// Changes no setting.</summary>
+    public async Task<DiscoveredMatrix?> DiscoverAsync()
+    {
+        var result = await CallAsync("discover");
+        if (!result.Ok) throw new InvalidOperationException(result.Error);
+        if (string.IsNullOrEmpty(result.Value)) return null;
+        return JsonSerializer.Deserialize<DiscoveredMatrix>(result.Value, Snapshot.JsonOptions);
+    }
+
     public Task<CommandResult> RemoveAdminPasswordAsync() => CallAsync("removeAdminPassword");
 
     public Task<CommandResult> SetAppearanceAsync(string value) =>

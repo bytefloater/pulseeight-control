@@ -9,6 +9,9 @@
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>
+            <!-- The title bar's back button gets no fill while disabled (just a dimmed arrow); hovering and pressing
+                 it when enabled still show their usual fill. -->
+            <SolidColorBrush x:Key="TitleBarBackButtonBackgroundDisabled" Color="Transparent" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

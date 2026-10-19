@@ -47,6 +47,30 @@ import PulseEightKit
         ])
     }
 
+    @Test func rowsSayWhichAreInGoodOrderAndWhichGroupTheyBelongTo() {
+        let health = SystemHealth(
+            status: 1, statusMessage: "Degraded",
+            rails: [PowerRail(name: "12V", volts: 12.25), PowerRail(name: "5V", ok: false, volts: 4.1)],
+            temperatures: [32],
+            components: [
+                HealthComponent(kind: .powerSupply(1), status: 0, message: "Healthy"),
+                HealthComponent(kind: .outputModules, status: 2, message: "Fault"),
+            ],
+            uptime: 90)
+        let rows = Presentation.healthRows(health, strings)
+
+        func row(_ label: String) -> LabeledValue { rows.first { $0.label == label }! }
+        #expect(row("Status").ok == false)
+        #expect(row("Uptime").ok == nil)
+        #expect(row("Power supply 1").ok == true)
+        #expect(row("Output modules").ok == false)
+        #expect(row("Temperature 1").ok == nil)
+        #expect(row("Supply rail 12V").ok == true)
+        #expect(row("Supply rail 5V").ok == false)
+        #expect(rows.filter { $0.group == "diagnostics" }.map(\.label) == ["Temperature 1", "Supply rail 12V", "Supply rail 5V"])
+        #expect(rows.filter { $0.group == "health" }.map(\.label) == ["Status", "Uptime", "Power supply 1", "Output modules"])
+    }
+
     @Test func anEmptyReportGivesNoRows() {
         #expect(Presentation.healthRows(SystemHealth(), strings).isEmpty)
     }

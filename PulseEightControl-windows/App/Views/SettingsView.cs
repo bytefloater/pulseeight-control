@@ -53,7 +53,10 @@ internal sealed class SettingsView : UserControl
         _prereleases.Toggled += async (_, _) => { if (!_loading) await _core.SetUpdatePrereleasesAsync(_prereleases.IsOn); };
         _checkNow.Click += async (_, _) => await _updates.CheckNowAsync();
 
-        Content = Ui.Page(Build());
+        var page = Ui.Page(Build());
+        Ui.LetPageScroll(_appearance, page);
+        Ui.LetPageScroll(_language, page);
+        Content = page;
     }
 
 

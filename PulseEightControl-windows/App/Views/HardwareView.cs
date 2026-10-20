@@ -312,6 +312,7 @@ internal sealed class HardwareView : UserControl
         if (panel.Backlight != null)
         {
             var picker = new ComboBox { MinWidth = 120 };
+            Ui.LetPageScroll(picker, _host);
             foreach (var key in new[] { "hardware.backlight.off", "hardware.backlight.low", "hardware.backlight.high" }) picker.Items.Add(Loc.T(key));
             picker.SelectedIndex = Array.IndexOf(Backlight, panel.Backlight);
             picker.SelectionChanged += async (_, _) =>

@@ -3,11 +3,17 @@ import PulseEightCore
 import Observation
 import PulseEightKit
 
-enum Page: String, CaseIterable, Identifiable, CustomStringConvertible {
+enum Page: String, CaseIterable, Identifiable {
     case routing, hardware
 
     var id: String { rawValue }
-    var description: String { rawValue.capitalized }
+
+    func title(_ strings: Strings) -> String {
+        switch self {
+        case .routing: strings.text(.navRouting)
+        case .hardware: strings.text(.navHardware)
+        }
+    }
 
     /// SF Symbol for the toolbar and View menu.
     var symbol: String {
@@ -23,11 +29,11 @@ enum SettingsPane: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var title: String {
+    func title(_ strings: Strings) -> String {
         switch self {
-        case .connections: "Connections"
-        case .appearance: "Appearance"
-        case .updates: "Updates"
+        case .connections: strings.text(.settingsConnections)
+        case .appearance: strings.text(.settingsAppearance)
+        case .updates: strings.text(.settingsUpdates)
         }
     }
 
@@ -197,9 +203,16 @@ final class AppModel {
         return phase
     }
 
+    /// The text the window shows, in the language in force. Reading the saved language makes the views that use it redraw when
+    /// the language changes.
+    var strings: Strings {
+        _ = settings.language
+        return core.strings
+    }
+
     var connectionSummary: String {
-        if isRestarting { return "Restarting \(core.hostLabel)…" }
-        return displayPhase == phase ? core.connectionSummary : core.strings.text(.connectionConnecting, core.hostLabel)
+        if isRestarting { return strings.text(.connectionRestarting, core.hostLabel) }
+        return displayPhase == phase ? core.connectionSummary : strings.text(.connectionConnecting, core.hostLabel)
     }
     var hostLabel: String { core.hostLabel }
 
@@ -208,12 +221,12 @@ final class AppModel {
 
     /// Short form for the window chrome; the host is in Settings.
     var connectionShort: String {
-        if isRestarting { return "Restarting…" }
+        if isRestarting { return strings.text(.connectionShortRestarting) }
         return switch displayPhase {
-        case .connected: "Connected"
-        case .connecting: "Connecting…"
-        case .notConfigured: "Not configured"
-        case .disconnected: "Not connected"
+        case .connected: strings.text(.connectionShortConnected)
+        case .connecting: strings.text(.connectionConnectingTitle)
+        case .notConfigured: strings.text(.connectionNotConfigured)
+        case .disconnected: strings.text(.connectionShortDisconnected)
         }
     }
 
@@ -319,7 +332,8 @@ final class AppModel {
                     state.ports.first { $0.mode == .output && $0.bay == output }?.receiveFrom == input
                 }
             } catch {
-                routeError = "Failed to set route: \(error.localizedDescription)"
+                // The alert says what failed (routingErrorTitle); this is why.
+                routeError = error.localizedDescription
             }
             pendingRoutes.remove(key)
         }
@@ -408,6 +422,16 @@ final class AppModel {
     }
 
     // MARK: View preferences
+
+    /// The language of the app: a code from `Languages.all`, or `Languages.systemSetting` to follow macOS.
+    func setLanguage(_ code: String) {
+        try? core.setLanguage(code)
+    }
+
+    /// Whether updates may be release candidates and betas (Settings > Updates).
+    func setUpdatePrereleases(_ on: Bool) {
+        core.setUpdatePrereleases(on)
+    }
 
     func setHighlightGrid(_ on: Bool) {
         core.setHighlightGrid(on)
@@ -546,7 +570,7 @@ final class AppModel {
         defer { discovering = false }
         do {
             if let found = try await core.discoverMatrix() { return found }
-            report("No matrix found on this network. Check that its monitoring LED is solid green and that this Mac is on the same network as the matrix.")
+            report(strings.text(.matrixNoneFound))
         } catch {
             report(error.localizedDescription)
         }
@@ -559,7 +583,7 @@ final class AppModel {
         guard let found = await discover(reportingTo: { matrixMessage = ($0, true) }) else { return }
         matrixDraft.host = found.host
         matrixDraft.port = String(found.port)
-        matrixMessage = ("Found a matrix at \(found.host).", false)
+        matrixMessage = (strings.text(.matrixFound, found.host), false)
     }
 
     /// The no-matrix screen: adds what was found and connects to it straight away.

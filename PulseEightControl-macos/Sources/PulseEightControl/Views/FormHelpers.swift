@@ -42,4 +42,3 @@ struct ControlRow<Control: View>: View {
     }
 }
 
-func yesNo(_ value: Bool) -> String { value ? "Yes" : "No" }

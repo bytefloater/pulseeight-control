@@ -8,11 +8,13 @@ struct SettingsView: View {
     /// Which matrix's popover is open.
     @State private var editing: MatrixEditTarget?
 
+    private var strings: Strings { model.strings }
+
     var body: some View {
         NavigationSplitView {
             List(selection: paneBinding) {
                 ForEach(SettingsPane.allCases) { pane in
-                    Label(pane.title, systemImage: pane.symbol).tag(pane)
+                    Label(pane.title(strings), systemImage: pane.symbol).tag(pane)
                 }
             }
             .navigationSplitViewColumnWidth(200)
@@ -26,7 +28,7 @@ struct SettingsView: View {
                 }
             }
             .formStyle(.grouped)
-            .navigationTitle(model.settingsPane.title)
+            .navigationTitle(model.settingsPane.title(strings))
         }
         .frame(width: 720, height: 520)
     }
@@ -37,7 +39,7 @@ struct SettingsView: View {
     private var connectionsPane: some View {
         Section {
             if model.matrices.isEmpty {
-                Text("No matrices yet. Add one to get started.")
+                Text(strings.text(.settingsConnectionsNone))
                     .foregroundStyle(.secondary)
             }
             ForEach(model.matrices) { matrix in
@@ -45,15 +47,15 @@ struct SettingsView: View {
             }
             HStack {
                 Spacer()
-                Button("Add Matrix…") { edit(.new) }
+                Button(strings.text(.settingsConnectionsAdd)) { edit(.new) }
                     .popover(isPresented: isEditing(.new), arrowEdge: .bottom) {
                         MatrixEditor(model: model, close: { editing = nil })
                     }
             }
         } header: {
-            Text("Connections")
+            Text(strings.text(.settingsConnections))
         } footer: {
-            Text("Pick the matrix to control. Each one has its own address, timings and admin password; the admin password is needed to rename ports and change EDID or front panel settings, and is kept in the system's secure storage.")
+            Text(strings.text(.settingsConnectionsCaption))
         }
     }
 
@@ -68,49 +70,61 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var appearancePane: some View {
-        Section("Theme") {
-            ControlRow("Appearance") {
-                Picker("Appearance", selection: appearanceBinding) {
-                    ForEach(Appearance.allCases, id: \.self) { Text($0.description).tag($0) }
+        Section(strings.text(.settingsTheme)) {
+            ControlRow(strings.text(.settingsAppearance)) {
+                Picker(strings.text(.settingsAppearance), selection: appearanceBinding) {
+                    ForEach(Appearance.allCases, id: \.self) { Text($0.title(strings)).tag($0) }
                 }
                 .fixedSize()
             }
         }
-        Section("Window") {
-            ControlRow("Highlight row and column") { Toggle("Highlight row and column", isOn: highlightBinding) }
-            ControlRow("Show status bar") { Toggle("Show status bar", isOn: statusBarBinding) }
+        Section(strings.text(.settingsLanguage)) {
+            ControlRow(strings.text(.settingsLanguage)) {
+                Picker(strings.text(.settingsLanguage), selection: languageBinding) {
+                    Text(strings.text(.languageSystem)).tag(Languages.systemSetting)
+                    ForEach(Languages.all, id: \.code) { Text($0.nativeName).tag($0.code) }
+                }
+                .fixedSize()
+            }
+        }
+        Section(strings.text(.settingsWindow)) {
+            ControlRow(strings.text(.settingsHighlight)) { Toggle(strings.text(.settingsHighlight), isOn: highlightBinding) }
+            ControlRow(strings.text(.settingsStatusBar)) { Toggle(strings.text(.settingsStatusBar), isOn: statusBarBinding) }
         }
     }
 
     @ViewBuilder
     private var updatesPane: some View {
-        Section("Version") {
-            LabeledContent("PulseEight Control") { Text(AppVersion.description()).textSelection(.enabled) }
+        Section(strings.text(.aboutVersion)) {
+            LabeledContent(strings.text(.appTitle)) { Text(AppVersion.description(strings: strings)).textSelection(.enabled) }
         }
         if updater.isAvailable {
             Section {
-                ControlRow("Automatically check for updates") {
-                    Toggle("Automatically check for updates", isOn: $updater.automaticallyChecks)
+                ControlRow(strings.text(.settingsUpdatesAuto)) {
+                    Toggle(strings.text(.settingsUpdatesAuto), isOn: $updater.automaticallyChecks)
                 }
-                LabeledContent("Last checked") {
+                ControlRow(strings.text(.settingsUpdatesPrereleases)) {
+                    Toggle(strings.text(.settingsUpdatesPrereleases), isOn: prereleasesBinding)
+                }
+                LabeledContent(strings.text(.settingsUpdatesLastCheckedLabel)) {
                     if let date = updater.lastChecked {
                         Text(date, format: .dateTime.day().month().year().hour().minute())
                     } else {
-                        Text("Never").foregroundStyle(.secondary)
+                        Text(strings.text(.commonNever)).foregroundStyle(.secondary)
                     }
                 }
-                ControlRow("Check for updates") {
-                    Button("Check Now") { updater.checkForUpdates() }
+                ControlRow(strings.text(.settingsUpdatesCheckNow)) {
+                    Button(strings.text(.settingsUpdatesCheckNowButton)) { updater.checkForUpdates() }
                         .disabled(!updater.canCheckForUpdates)
                 }
             } header: {
-                Text("Software Update")
+                Text(strings.text(.settingsUpdates))
             } footer: {
-                Text("Updates are signed and checked before they are installed.")
+                Text(strings.text(.settingsUpdatesFooter) + " " + strings.text(.settingsUpdatesPrereleasesCaption))
             }
         } else {
             Section {
-                Text("Updates are delivered to the packaged app. This is a development build, so there is nothing to check.")
+                Text(strings.text(.settingsUpdatesUnavailable))
                     .foregroundStyle(.secondary)
             }
         }
@@ -120,6 +134,20 @@ struct SettingsView: View {
 
     private var paneBinding: Binding<SettingsPane?> {
         Binding(get: { model.settingsPane }, set: { if let pane = $0 { model.settingsPane = pane } })
+    }
+
+    /// Unset follows the installed build (a beta keeps getting betas); once chosen it is what was chosen.
+    private var prereleasesBinding: Binding<Bool> {
+        Binding(
+            get: { model.settings.updatePrereleases ?? updater.buildIsPrerelease },
+            set: { model.setUpdatePrereleases($0) })
+    }
+
+    /// The saved choice: a language, or "system". A saved language that is no longer offered shows as following the system.
+    private var languageBinding: Binding<String> {
+        Binding(
+            get: { Languages.all.contains { $0.code == model.settings.language } ? model.settings.language : Languages.systemSetting },
+            set: { model.setLanguage($0) })
     }
 
     private var appearanceBinding: Binding<Appearance> {

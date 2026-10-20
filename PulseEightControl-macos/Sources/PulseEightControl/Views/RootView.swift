@@ -5,6 +5,8 @@ struct RootView: View {
     @Bindable var model: AppModel
     @Environment(\.openSettings) private var openSettings
 
+    private var strings: Strings { model.strings }
+
     var body: some View {
         VStack(spacing: 0) {
             content
@@ -16,9 +18,9 @@ struct RootView: View {
                 ToolbarItem(placement: .navigation) { MatrixPicker(model: model, openConnections: openConnections) }
             }
             ToolbarItem(placement: .principal) {
-                Picker("Page", selection: $model.page) {
+                Picker(strings.text(.navPage), selection: $model.page) {
                     ForEach(Page.allCases) { page in
-                        Label(page.description, systemImage: page.symbol).tag(page)
+                        Label(page.title(strings), systemImage: page.symbol).tag(page)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -28,14 +30,14 @@ struct RootView: View {
         .sheet(isPresented: sheetBinding) {
             PortDetailSheet(model: model)
         }
-        .alert("Restart \(model.hostLabel)?", isPresented: $model.confirmingRestart) {
-            Button("Restart", role: .destructive) { model.restartMatrix() }
-            Button("Cancel", role: .cancel) {}
+        .alert(strings.text(.maintenanceConfirmTitle, model.hostLabel), isPresented: $model.confirmingRestart) {
+            Button(strings.text(.maintenanceConfirmButton), role: .destructive) { model.restartMatrix() }
+            Button(strings.text(.commonCancel), role: .cancel) {}
         } message: {
-            Text("The matrix goes offline for about a minute and everything routed through it is interrupted: displays lose their picture until it is back. PulseEight Control reconnects by itself.")
+            Text(strings.text(.maintenanceConfirmBody))
         }
-        .alert("Couldn't restart the matrix", isPresented: restartErrorBinding) {
-            Button("OK") {}
+        .alert(strings.text(.maintenanceError), isPresented: restartErrorBinding) {
+            Button(strings.text(.commonOK)) {}
         } message: {
             Text(model.restartError ?? "")
         }
@@ -92,20 +94,22 @@ struct MatrixPicker: View {
     @Bindable var model: AppModel
     var openConnections: () -> Void
 
+    private var strings: Strings { model.strings }
+
     var body: some View {
         Menu {
-            Picker("Matrix", selection: selection) {
+            Picker(strings.text(.matrixSwitch), selection: selection) {
                 ForEach(model.matrices) { matrix in
                     Text(matrix.displayName).tag(Optional(matrix.id))
                 }
             }
             .pickerStyle(.inline)
             Divider()
-            Button("Manage Connections…", action: openConnections)
+            Button(strings.text(.matrixManage), action: openConnections)
         } label: {
-            Label(model.settings.selectedMatrix?.displayName ?? "Matrix", systemImage: "rectangle.connected.to.line.below")
+            Label(model.settings.selectedMatrix?.displayName ?? strings.text(.matrixSwitch), systemImage: "rectangle.connected.to.line.below")
         }
-        .help("Choose the matrix to control")
+        .help(strings.text(.matrixChoose))
     }
 
     private var selection: Binding<UUID?> {

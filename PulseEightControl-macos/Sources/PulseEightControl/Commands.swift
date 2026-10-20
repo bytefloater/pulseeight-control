@@ -8,6 +8,7 @@ struct AppCommands: Commands {
     var model: AppModel
     var updater: UpdaterModel
 
+    private var strings: Strings { model.strings }
     private var features: SystemFeatures? { model.state?.system?.features }
     private var hasHost: Bool { model.settings.matrix.host?.isEmpty == false }
 
@@ -21,37 +22,37 @@ struct AppCommands: Commands {
         // Under "About PulseEight Control", where Mac apps keep it. Absent from development runs.
         if updater.isAvailable {
             CommandGroup(after: .appInfo) {
-                Button("Check for Updates…") { updater.checkForUpdates() }
+                Button(strings.text(.menuCheckForUpdates)) { updater.checkForUpdates() }
                     .disabled(!updater.canCheckForUpdates)
             }
         }
 
         CommandGroup(replacing: .newItem) {
-            Button("Open Matrix Web Interface") { openWebInterface() }
+            Button(strings.text(.menuOpenWebInterface)) { openWebInterface() }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
                 .disabled(!hasHost)
-            Button("Show Settings Folder in Finder") { showSettingsFolder() }
+            Button(strings.text(.menuShowSettingsFolder)) { showSettingsFolder() }
         }
 
         CommandGroup(before: .toolbar) {
-            Button("Routing") { model.page = .routing }
+            Button(strings.text(.navRouting)) { model.page = .routing }
                 .keyboardShortcut("1")
-            Button("Hardware") { model.page = .hardware }
+            Button(strings.text(.navHardware)) { model.page = .hardware }
                 .keyboardShortcut("2")
             Divider()
-            Toggle("Highlight Row and Column", isOn: Binding(
+            Toggle(strings.text(.menuHighlightGrid), isOn: Binding(
                 get: { model.settings.highlightGrid }, set: { model.setHighlightGrid($0) }
             ))
-            Toggle("Show Status Bar", isOn: Binding(
+            Toggle(strings.text(.menuShowStatusBar), isOn: Binding(
                 get: { model.settings.showStatusBar }, set: { model.setShowStatusBar($0) }
             ))
             .keyboardShortcut("/")
             Divider()
         }
 
-        CommandMenu("Matrix") {
+        CommandMenu(strings.text(.settingsMatrix)) {
             if model.matrices.count > 1 {
-                Picker("Switch Matrix", selection: Binding(
+                Picker(strings.text(.menuSwitchMatrix), selection: Binding(
                     get: { model.selectedMatrixID },
                     set: { if let id = $0 { model.selectMatrix(id: id) } }
                 )) {
@@ -61,28 +62,28 @@ struct AppCommands: Commands {
                 }
                 Divider()
             }
-            Button("Refresh Now") { model.retry() }
+            Button(strings.text(.menuRefreshNow)) { model.retry() }
                 .keyboardShortcut("r")
                 .disabled(!hasHost)
-            Button("Reconnect") { model.reconnect() }
+            Button(strings.text(.menuReconnect)) { model.reconnect() }
                 .keyboardShortcut("r", modifiers: [.command, .option])
                 .disabled(!hasHost)
             Divider()
-            Menu("Backlight") {
-                backlightToggle("Off", .off)
-                backlightToggle("Dim", .low)
-                backlightToggle("Bright", .high)
+            Menu(strings.text(.hardwareBacklight)) {
+                backlightToggle(strings.text(.hardwareBacklightOff), .off)
+                backlightToggle(strings.text(.hardwareBacklightLow), .low)
+                backlightToggle(strings.text(.hardwareBacklightHigh), .high)
             }
-            Toggle("Status LED", isOn: Binding(
+            Toggle(strings.text(.hardwareStatusLight), isOn: Binding(
                 get: { features?.statusLEDOn == true },
                 set: { model.setStatusLED(on: $0) }
             ))
             .disabled(features?.statusLED == nil || !model.adminConfigured)
             Divider()
-            Button("Restart Matrix…") { model.requestRestart() }
+            Button(strings.text(.menuRestartMatrix)) { model.requestRestart() }
                 .disabled(!model.adminConfigured || model.isRestarting)
             Divider()
-            Button("Copy Matrix Address") { copyAddress() }
+            Button(strings.text(.menuCopyAddress)) { copyAddress() }
                 .keyboardShortcut("c", modifiers: [.command, .shift])
                 .disabled(matrixAddress == nil)
         }

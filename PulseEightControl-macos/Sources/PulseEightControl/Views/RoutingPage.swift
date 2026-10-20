@@ -1,3 +1,4 @@
+import PulseEightCore
 import PulseEightKit
 import SwiftUI
 
@@ -30,6 +31,7 @@ private struct HoverPosition: Equatable {
 /// is the input currently routed to that output. Headers are part of the grid.
 struct RoutingPage: View {
     @Bindable var model: AppModel
+    private var strings: Strings { model.strings }
     @State private var hover: HoverPosition?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.self) private var environment
@@ -41,7 +43,7 @@ struct RoutingPage: View {
             ScrollView([.horizontal, .vertical]) {
                 Group {
                     if inputs.isEmpty || outputs.isEmpty {
-                        Text("The matrix reported no ports.").foregroundStyle(.secondary)
+                        Text(strings.text(.hardwareNoPorts)).foregroundStyle(.secondary)
                     } else {
                         grid(inputs: inputs, outputs: outputs)
                     }
@@ -51,8 +53,8 @@ struct RoutingPage: View {
                 .frame(minWidth: geometry.size.width, minHeight: geometry.size.height, alignment: .topLeading)
             }
         }
-        .alert("Couldn't change the route", isPresented: routeErrorBinding, presenting: model.routeError) { _ in
-            Button("OK") {}
+        .alert(strings.text(.routingErrorTitle), isPresented: routeErrorBinding, presenting: model.routeError) { _ in
+            Button(strings.text(.commonOK)) {}
         } message: { message in
             Text(message)
         }
@@ -119,7 +121,7 @@ struct RoutingPage: View {
         }
         .buttonStyle(.plain)
         .onHover { setHover($0, input: port.bay, output: nil) }
-        .help("\(port.name): \(port.status.label). Click for details")
+        .help(strings.text(.routingPortTooltip, port.name, port.bay + 1, Presentation.statusLabel(port.status, strings)))
     }
 
     private func rowHeader(_ port: MatrixPort, highlighted: Bool) -> some View {
@@ -137,7 +139,7 @@ struct RoutingPage: View {
         }
         .buttonStyle(.plain)
         .onHover { setHover($0, input: nil, output: port.bay) }
-        .help("\(port.name): \(port.status.label). Click for details")
+        .help(strings.text(.routingPortTooltip, port.name, port.bay + 1, Presentation.statusLabel(port.status, strings)))
     }
 
     private func cell(input: MatrixPort, output: MatrixPort, highlighted: Bool) -> some View {
@@ -167,7 +169,7 @@ struct RoutingPage: View {
         }
         .buttonStyle(.plain)
         .onHover { setHover($0, input: input.bay, output: output.bay) }
-        .help("\(input.name) → \(output.name)")
+        .help(strings.text(.routingRoute, input.name, output.name))
     }
 
     // MARK: Glyph contrast

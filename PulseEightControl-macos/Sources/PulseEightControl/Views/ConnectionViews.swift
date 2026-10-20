@@ -1,9 +1,12 @@
+import PulseEightCore
 import PulseEightKit
 import SwiftUI
 
 /// Bottom status bar: connection first, then whatever else is worth knowing.
 struct StatusBar: View {
     var model: AppModel
+
+    private var strings: Strings { model.strings }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -50,16 +53,16 @@ struct StatusBar: View {
     private var statusItems: [StatusItem] {
         var items = [StatusItem(id: "connection", kind: .connection, text: "")]
         if model.adminConfigured {
-            items.append(StatusItem(id: "admin", kind: .text, text: "Admin enabled"))
+            items.append(StatusItem(id: "admin", kind: .text, text: strings.text(.statusBarAdminEnabled)))
         }
         if let count = model.state?.updates.count, count > 0 {
-            items.append(StatusItem(id: "updates", kind: .updates, text: "\(count) firmware update\(count == 1 ? "" : "s") available"))
+            items.append(StatusItem(id: "updates", kind: .updates, text: strings.count(count, one: .statusBarFirmwareUpdateOne, other: .statusBarFirmwareUpdateOther)))
         }
         if let system = model.state?.system {
             items.append(StatusItem(id: "model", kind: .text, text: "\(system.details.model) \(system.details.version)"))
         }
         if let state = model.state, !state.ports.isEmpty {
-            items.append(StatusItem(id: "ports", kind: .text, text: "\(state.inputs.count) in, \(state.outputs.count) out"))
+            items.append(StatusItem(id: "ports", kind: .text, text: strings.text(.statusBarPorts, state.inputs.count, state.outputs.count)))
         }
         return items
     }
@@ -77,46 +80,48 @@ struct ConnectionPanel: View {
     var model: AppModel
     @Environment(\.openMatrixSettings) private var openSettings
 
+    private var strings: Strings { model.strings }
+
     var body: some View {
         Group {
             if model.isRestarting {
                 VStack(spacing: 8) {
-                    ProgressView("Restarting \(model.hostLabel)…")
-                    Text("This takes about a minute. PulseEight Control reconnects by itself.")
+                    ProgressView(strings.text(.connectionRestarting, model.hostLabel))
+                    Text(strings.text(.connectionRestartingDetail))
                         .foregroundStyle(.secondary)
                 }
             } else {
                 switch model.displayPhase {
                 case .notConfigured:
                     ContentUnavailableView {
-                        Label("No matrix configured", systemImage: "network.slash")
+                        Label(strings.text(.connectionNoMatrixTitle), systemImage: "network.slash")
                     } description: {
-                        Text("Find your NeoMatrix on this network, or enter its IP address in Settings.")
+                        Text(strings.text(.connectionNoMatrixDetail))
                         if let error = model.discoveryError { Text(error).foregroundStyle(.red) }
                     } actions: {
-                        Button(model.discovering ? "Looking…" : "Find Matrix") { Task { await model.findAndConnect() } }
+                        Button(model.discovering ? strings.text(.connectionFinding) : strings.text(.connectionFindMatrix)) { Task { await model.findAndConnect() } }
                             .disabled(model.discovering)
                             .buttonStyle(.borderedProminent)
-                        Button("Open Settings") { openSettings() }
+                        Button(strings.text(.connectionOpenSettings)) { openSettings() }
                     }
                 case .connecting:
                     VStack(spacing: 8) {
-                        ProgressView("Connecting to \(model.hostLabel)…")
+                        ProgressView(strings.text(.connectionConnecting, model.hostLabel))
                         if model.localNetwork.state == .asking {
-                            Text("macOS is asking whether PulseEight Control may use the local network. Choose Allow.")
+                            Text(strings.text(.connectionLocalNetworkAsking))
                                 .foregroundStyle(.secondary)
                         }
                     }
                 case .disconnected(let reason):
                     ContentUnavailableView {
-                        Label("Can't reach the matrix", systemImage: "exclamationmark.triangle")
+                        Label(strings.text(.connectionUnreachableTitle), systemImage: "exclamationmark.triangle")
                     } description: {
-                        Text("No response from \(model.hostLabel).")
+                        Text(strings.text(.connectionNoResponse, model.hostLabel))
                         if let reason { Text(reason) }
                     } actions: {
-                        Button(model.retrying ? "Retrying…" : "Retry now") { model.retry() }
+                        Button(model.retrying ? strings.text(.connectionRetrying) : strings.text(.connectionTryAgain)) { model.retry() }
                             .disabled(model.retrying)
-                        Button("Open Settings") { openSettings() }
+                        Button(strings.text(.connectionOpenSettings)) { openSettings() }
                     }
                 case .connected:
                     EmptyView()

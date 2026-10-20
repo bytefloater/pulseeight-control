@@ -29,7 +29,7 @@ enum HardwareTopic: String, CaseIterable, Identifiable {
         case .health: strings.text(.hardwareHealth)
         case .diagnostics: strings.text(.hardwareDiagnostics)
         case .frontPanel: strings.text(.hardwareFrontPanel)
-        case .maintenance: "Maintenance"
+        case .maintenance: strings.text(.hardwareMaintenance)
         case .updates: strings.text(.hardwareFirmwareUpdates)
         case .inputs: strings.text(.hardwareInputs)
         case .outputs: strings.text(.hardwareOutputs)
@@ -43,7 +43,7 @@ enum HardwareTopic: String, CaseIterable, Identifiable {
         case .health: strings.text(.hardwareHealthDescription)
         case .diagnostics: strings.text(.hardwareDiagnosticsDescription)
         case .frontPanel: strings.text(.hardwareFrontPanelDescription)
-        case .maintenance: "Restart the matrix"
+        case .maintenance: strings.text(.hardwareMaintenanceDescription)
         case .updates: strings.text(.hardwareFirmwareDescription)
         case .inputs: strings.text(.hardwareInputsDescription)
         case .outputs: strings.text(.hardwareOutputsDescription)
@@ -87,7 +87,7 @@ struct HardwarePage: View {
     /// Which way the page being drawn arrived from, for the slide: 1 opening a topic, -1 going back.
     @State private var direction: CGFloat = 1
 
-    private var strings: Strings { model.core.strings }
+    private var strings: Strings { model.strings }
 
     var body: some View {
         if let state = model.state {
@@ -319,13 +319,13 @@ struct HardwarePage: View {
     /// Admin only. The restart itself is only sent after the confirmation alert (see `AppModel.requestRestart`).
     private func maintenanceSection(_ topic: HardwareTopic) -> some View {
         Section {
-            ControlRow("Restart") {
-                Button("Restart Matrix…", role: .destructive) { model.requestRestart() }
+            ControlRow(strings.text(.maintenanceRestart)) {
+                Button(strings.text(.maintenanceRestartButton), role: .destructive) { model.requestRestart() }
             }
         } header: {
             header(topic)
         } footer: {
-            Text("Restarting interrupts everything routed through the matrix for about a minute.")
+            Text(strings.text(.maintenanceRestartCaption))
         }
     }
 

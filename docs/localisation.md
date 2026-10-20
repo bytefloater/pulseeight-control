@@ -46,7 +46,21 @@ blank or a raw key, but the tests above insist on completeness anyway.
 
 ## Not translated yet
 
-* The macOS app (`PulseEightControl-macos`) still has its English text inline. Moving it onto
-  `AppCore.strings` also needs a language picker in its Settings; do it on a Mac so it can be compiled.
+* Only English exists. Both apps are ready for more: the macOS app takes all its text from the catalog (below) and, like the
+  Windows app, has a Language picker in Settings (Appearance) that lists `Languages.all`.
 * Developer-facing text: the JSON command protocol's own errors (`Unknown command`, `Missing text field`),
   `p8ctl` output, and `PulseEightKit`'s diagnostic messages.
+
+## Keeping the macOS app honest
+
+Every word a person reads in the macOS app comes from the catalog, through `model.strings` (a `Strings` for the language in force;
+reading it makes a view redraw when the language changes). `PulseEightControlTests/NoHardcodedTextTests` scans the app's sources and
+fails if a SwiftUI control (`Text`, `Button`, `Label`, `Section`, `Toggle`, `Picker`, `.help`, `.navigationTitle`, `.alert`, ...) is
+given a string literal as its text. It allows `Text(verbatim:)` for text that is the same in every language (an example IP
+address), SF Symbol names, and strings built from data (an address, a port's name). When it fails, add the text to `StringKey` and
+`Catalog_en` and use it.
+
+Text that is not in the catalog today: the messages the Kit and the matrix produce for a failed request (`MatrixError`,
+`TransportError`: "Failed to connect to matrix: ...", "API returned status 503"). They are diagnostics and reach the apps through
+`error.localizedDescription`; localising them means giving the Kit (which sits below the catalog) a way to ask for text.
+

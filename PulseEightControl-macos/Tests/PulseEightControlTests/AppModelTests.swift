@@ -191,7 +191,9 @@ func waitUntil(timeout: TimeInterval = 6, _ condition: @MainActor () -> Bool) as
         let h = await Harness.make()
         h.model.route(input: 0, output: 99)
         #expect(await waitUntil { h.model.routeError != nil })
-        #expect(h.model.routeError?.hasPrefix("Failed to set route:") == true)
+        // The alert's title says what failed (it is localised); the message is only why.
+        #expect(h.model.routeError?.isEmpty == false)
+        #expect(h.model.routeError?.hasPrefix("Failed to set route:") == false)
         #expect(await waitUntil { h.model.pendingRoutes.isEmpty })
     }
 }
@@ -430,6 +432,34 @@ func waitUntil(timeout: TimeInterval = 6, _ condition: @MainActor () -> Bool) as
         #expect(h.model.saveMatrixDraft())
         #expect(try h.secrets.secret(for: AppCore.adminAccount(for: h.matrixID)) == nil)
         #expect(await waitUntil { !h.model.adminConfigured })
+    }
+
+    @Test func thePreReleaseChoiceIsUnsetUntilMadeThenSaved() async throws {
+        let h = await Harness.make()
+        #expect(h.model.settings.updatePrereleases == nil, "unset follows the installed build")
+
+        h.model.setUpdatePrereleases(true)
+        #expect(await waitUntil { h.model.settings.updatePrereleases == true })
+        #expect(AppSettings.load(from: h.settingsURL).updatePrereleases == true)
+
+        h.model.setUpdatePrereleases(false)
+        #expect(await waitUntil { h.model.settings.updatePrereleases == false })
+        #expect(AppSettings.load(from: h.settingsURL).updatePrereleases == false)
+    }
+
+    @Test func theLanguageDefaultsToFollowingMacOSAndIsSavedWhenChosen() async throws {
+        let h = await Harness.make()
+        #expect(h.model.settings.language == Languages.systemSetting)
+        #expect(h.model.strings.language == Languages.resolve(Languages.systemSetting))
+
+        h.model.setLanguage("en")
+        #expect(await waitUntil { h.model.settings.language == "en" })
+        #expect(AppSettings.load(from: h.settingsURL).language == "en")
+        #expect(h.model.strings.language.code == "en")
+
+        h.model.setLanguage("xx") // not offered: refused, nothing changes
+        try await Task.sleep(nanoseconds: 100_000_000)
+        #expect(h.model.settings.language == "en")
     }
 
     @Test func appearanceAppliesAtOnceAndIsSaved() async throws {

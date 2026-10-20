@@ -10,9 +10,13 @@ struct PulseEightControlApp: App {
 
     var body: some Scene {
         // A single window (not a WindowGroup), so there is no File > New Window.
-        Window("PulseEight Control", id: "main") {
+        Window(model.strings.text(.appTitle), id: "main") {
             RootView(model: model)
                 .task { await model.start() }
+                // The updater follows the setting, or the installed build while the setting is unset.
+                .onChange(of: model.settings.updatePrereleases, initial: true) { _, setting in
+                    updater.includePrereleases = setting ?? updater.buildIsPrerelease
+                }
                 // Set on the app rather than with `.preferredColorScheme`: that modifier can't go back to
                 // "follow the system" cleanly. Choosing System left the window half redrawn in the old
                 // scheme until it next took focus.
@@ -46,6 +50,17 @@ extension Appearance {
         case .system: nil
         case .light: NSAppearance(named: .aqua)
         case .dark: NSAppearance(named: .darkAqua)
+        }
+    }
+}
+
+extension Appearance {
+    /// What the theme picker calls it.
+    func title(_ strings: Strings) -> String {
+        switch self {
+        case .system: strings.text(.themeSystem)
+        case .light: strings.text(.themeLight)
+        case .dark: strings.text(.themeDark)
         }
     }
 }

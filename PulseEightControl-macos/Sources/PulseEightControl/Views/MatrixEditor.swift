@@ -17,6 +17,7 @@ struct MatrixRow: View {
     var matrix: MatrixProfile
     @Binding var editing: MatrixEditTarget?
 
+    private var strings: Strings { model.strings }
     private var isSelected: Bool { model.selectedMatrixID == matrix.id }
 
     var body: some View {
@@ -27,7 +28,7 @@ struct MatrixRow: View {
                     .imageScale(.large)
             }
             .buttonStyle(.plain)
-            .help(isSelected ? "The matrix being shown" : "Show this matrix")
+            .help(isSelected ? strings.text(.settingsConnectionsShown) : strings.text(.settingsConnectionsShow))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(matrix.displayName)
@@ -40,7 +41,7 @@ struct MatrixRow: View {
 
             Spacer()
 
-            Button("Edit…") {
+            Button(strings.text(.settingsConnectionsEdit)) {
                 model.beginEditingMatrix(matrix.id)
                 editing = .existing(matrix.id)
             }
@@ -62,35 +63,38 @@ struct MatrixEditor: View {
     var close: () -> Void
     @State private var confirmingRemove = false
 
+    private var strings: Strings { model.strings }
     private var isNew: Bool { model.matrixDraft.id == nil }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(isNew ? "Add Matrix" : "Edit Matrix").font(.headline)
+            Text(isNew ? strings.text(.matrixAddTitle) : strings.text(.matrixEditTitle)).font(.headline)
 
             Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 8) {
-                row("Name") {
-                    TextField("Name", text: $model.matrixDraft.name, prompt: Text("Lounge"))
+                row(strings.text(.matrixName)) {
+                    TextField(strings.text(.matrixName), text: $model.matrixDraft.name, prompt: Text(strings.text(.matrixNamePlaceholder)))
                 }
-                row("Host") {
+                row(strings.text(.settingsAddress)) {
                     HStack {
-                        TextField("Host", text: $model.matrixDraft.host, prompt: Text("192.168.1.150"))
-                        Button(model.discovering ? "Looking…" : "Find") { Task { await model.findMatrixForDraft() } }
+                        // 192.168.1.150 is an example address, not words: it is the same in every language.
+                        TextField(strings.text(.settingsAddress), text: $model.matrixDraft.host, prompt: Text(verbatim: "192.168.1.150"))
+                        Button(model.discovering ? strings.text(.matrixFinding) : strings.text(.matrixFind)) { Task { await model.findMatrixForDraft() } }
                             .disabled(model.discovering)
-                            .help("Ask gotomymatrix.com which matrix is on this network")
+                            .help(strings.text(.matrixFindCaption))
                     }
                 }
-                row("Port") { TextField("Port", text: $model.matrixDraft.port, prompt: Text("80")) }
-                row("Timeout (s)") { TextField("Timeout", text: $model.matrixDraft.timeout, prompt: Text("10")) }
-                row("Poll interval (s)") { TextField("Poll interval", text: $model.matrixDraft.pollInterval, prompt: Text("5")) }
-                row("Detail poll (s)") { TextField("Detail poll interval", text: $model.matrixDraft.detailPollInterval, prompt: Text("20")) }
-                row("Admin password") {
+                row(strings.text(.settingsPort)) { TextField(strings.text(.settingsPort), text: $model.matrixDraft.port, prompt: Text(verbatim: "80")) }
+                row(strings.text(.matrixTimeoutSeconds)) { TextField(strings.text(.settingsTimeout), text: $model.matrixDraft.timeout, prompt: Text(verbatim: "10")) }
+                row(strings.text(.matrixPollSeconds)) { TextField(strings.text(.settingsRefresh), text: $model.matrixDraft.pollInterval, prompt: Text(verbatim: "5")) }
+                row(strings.text(.matrixDetailPollSeconds)) { TextField(strings.text(.settingsDetailInterval), text: $model.matrixDraft.detailPollInterval, prompt: Text(verbatim: "20")) }
+                row(strings.text(.matrixAdminPassword)) {
                     VStack(alignment: .leading, spacing: 4) {
                         SecureField(
-                            "Admin password", text: $model.matrixDraft.adminPassword,
-                            prompt: Text(model.matrixDraft.adminPasswordSaved && !model.matrixDraft.clearAdminPassword ? "Saved" : "Optional"))
+                            strings.text(.matrixAdminPassword), text: $model.matrixDraft.adminPassword,
+                            prompt: Text(model.matrixDraft.adminPasswordSaved && !model.matrixDraft.clearAdminPassword
+                                ? strings.text(.matrixPasswordSaved) : strings.text(.matrixPasswordOptional)))
                         if model.matrixDraft.adminPasswordSaved {
-                            Toggle("Remove the saved password", isOn: $model.matrixDraft.clearAdminPassword)
+                            Toggle(strings.text(.matrixClearPassword), isOn: $model.matrixDraft.clearAdminPassword)
                                 .toggleStyle(.checkbox)
                                 .font(.callout)
                         }
@@ -110,19 +114,19 @@ struct MatrixEditor: View {
             HStack {
                 if !isNew, let id = model.matrixDraft.id {
                     if confirmingRemove {
-                        Button("Remove", role: .destructive) {
+                        Button(strings.text(.commonRemove), role: .destructive) {
                             model.removeMatrix(id: id)
                             close()
                         }
-                        Button("Keep") { confirmingRemove = false }
+                        Button(strings.text(.matrixKeep)) { confirmingRemove = false }
                     } else {
-                        Button("Remove Matrix…", role: .destructive) { confirmingRemove = true }
+                        Button(strings.text(.matrixRemove), role: .destructive) { confirmingRemove = true }
                     }
                 }
                 Spacer()
-                Button("Cancel") { close() }
+                Button(strings.text(.commonCancel)) { close() }
                     .keyboardShortcut(.cancelAction)
-                Button("Save") {
+                Button(strings.text(.commonSave)) {
                     if model.saveMatrixDraft() { close() }
                 }
                 .keyboardShortcut(.defaultAction)

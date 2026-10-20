@@ -92,11 +92,13 @@ yet), so a lost or replaced key would mean everyone installing the app again by 
   * the first install, from a browser-downloaded `.dmg`, shows macOS's "unidentified developer" warning:
     right-click the app, choose Open (or allow it in System Settings > Privacy & Security);
   * updates installed by the app itself are not quarantined, so they don't show that warning again.
-* The macOS app is built with the **hardened runtime on** (`ENABLE_HARDENED_RUNTIME` in the Xcode project,
-  `--options runtime` in `package.sh`), as notarization requires. The runtime's library validation only
-  loads frameworks signed by the same team, and an ad-hoc signature has no team, so ad-hoc builds (every
-  development build, and releases until there is a Developer ID) carry `PulseEightControl-macos/PulseEightControl.entitlements`,
-  which switches that check off. Without it the app aborts at launch with "Library not loaded: Sparkle".
+* The **hardened runtime** (which notarization requires) is on only for builds signed with a Developer ID
+  (`P8_SIGN_IDENTITY`, below). Ad-hoc releases (everything until there is a Developer ID) are signed without
+  it: on macOS 27, a browser-downloaded, unnotarized app that has the runtime hangs at launch (the dock icon
+  bounces, no window opens, and the Open Anyway button in Privacy & Security doesn't help); the same app
+  without the runtime opens normally. (The Xcode project still has
+  `ENABLE_HARDENED_RUNTIME` on, with `PulseEightControl-macos/PulseEightControl.entitlements` switching library
+  validation off so Sparkle loads under an ad-hoc signature; that only affects builds from Xcode.)
 
 ### Notarizing the macOS app (optional, not set up)
 
@@ -108,8 +110,8 @@ P8_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" PulseEightContro
 ```
 
 With `P8_SIGN_IDENTITY` set, `package.sh` signs Sparkle's helpers, the framework and the app with that one
-identity (hardened runtime, secure timestamp) and leaves the entitlement out, so library validation stays on
-and passes because everything shares the team. Then notarize and staple:
+identity (hardened runtime, secure timestamp), so library validation stays on and passes because everything
+shares the team. Then notarize and staple:
 
 ```sh
 ditto -c -k --keepParent out/macos/PulseEightControl.app out/macos/PulseEightControl.zip

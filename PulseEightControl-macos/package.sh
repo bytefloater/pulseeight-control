@@ -1,6 +1,6 @@
 #!/bin/sh
 # Builds PulseEightControl.app (the executable, Sparkle, Info.plist and the Icon Composer icon) into
-# ../out/macos/, signed with the hardened runtime on (ad-hoc unless P8_SIGN_IDENTITY is set).
+# ../out/macos/, signed ad-hoc, or with the hardened runtime when P8_SIGN_IDENTITY is set.
 #
 #   package.sh [debug|release] [--universal] [--open]
 #
@@ -86,23 +86,25 @@ xcrun actool PulseEightControl.icon \
     --app-icon PulseEightControl --include-all-app-icons \
     --target-device mac --minimum-deployment-target 14.0 --platform macosx
 
-# Hardened runtime, which notarization requires. Signed inside-out (Sparkle's helpers, then the framework,
-# then the app) rather than with --deep, which Apple advises against and which would overwrite the helpers'
-# entitlements.
+# Signed inside-out (Sparkle's helpers, then the framework, then the app) rather than with --deep, which
+# Apple advises against and which would overwrite the helpers' entitlements.
 #
-# With P8_SIGN_IDENTITY (a Developer ID Application identity) everything is signed by one team, so library
-# validation lets the app load Sparkle and no entitlement is needed; add notarization afterwards (see
-# docs/releasing.md). Without it the signature is ad-hoc and has no team, so the app gets
-# PulseEightControl.entitlements, which switches library validation off, or it couldn't load Sparkle.
+# Ad-hoc (the default, until there is a Developer ID) is signed WITHOUT the hardened runtime: on macOS 27 a
+# downloaded, unnotarized app that has it hangs at launch (the dock icon bounces, no window opens, and the
+# Open Anyway button in Privacy & Security doesn't help), where the same app signed without it opens normally. With no runtime, library validation isn't enforced, so no entitlement is needed.
+#
+# With P8_SIGN_IDENTITY (a Developer ID Application identity) the hardened runtime is on, as notarization
+# requires. Everything is signed by one team, so library validation lets the app load Sparkle and no
+# entitlement is needed; add notarization afterwards (see docs/releasing.md).
 # Updates are protected by Sparkle's own EdDSA check either way.
 identity="${P8_SIGN_IDENTITY:--}"
 framework="$app/Contents/Frameworks/Sparkle.framework"
 if [ "$identity" = "-" ]; then
     timestamp="--timestamp=none"
-    app_entitlements="--entitlements PulseEightControl.entitlements"
+    runtime=""
 else
     timestamp="--timestamp"
-    app_entitlements=""
+    runtime="--options runtime"
 fi
 for nested in \
     "$framework/Versions/B/XPCServices/Installer.xpc" \
@@ -110,12 +112,12 @@ for nested in \
     "$framework/Versions/B/Autoupdate" \
     "$framework/Versions/B/Updater.app"; do
     # shellcheck disable=SC2086
-    codesign --force --sign "$identity" --options runtime $timestamp --preserve-metadata=entitlements "$nested"
+    codesign --force --sign "$identity" $runtime $timestamp --preserve-metadata=entitlements "$nested"
 done
 # shellcheck disable=SC2086
-codesign --force --sign "$identity" --options runtime $timestamp "$framework"
+codesign --force --sign "$identity" $runtime $timestamp "$framework"
 # shellcheck disable=SC2086
-codesign --force --sign "$identity" --options runtime $timestamp $app_entitlements "$app"
+codesign --force --sign "$identity" $runtime $timestamp "$app"
 codesign --verify --deep --strict "$app"
 
 echo "Built $app ($version, build $build, $label, $([ -n "$feed" ] && echo "updates from $feed" || echo "no update feed"))"

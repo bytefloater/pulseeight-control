@@ -88,10 +88,13 @@ fi
 echo "== capture"
 ctl capture "$work/capture" >"$work/capture.log"
 count="$(ls "$work/capture" | wc -l | tr -d ' ')"
-[ "$count" = "19" ] && pass "capture wrote 19 files (3 system + 16 ports)" || fail "capture wrote $count files, wanted 19"
+[ "$count" = "21" ] && pass "capture wrote 21 files (5 system + 16 ports)" || fail "capture wrote $count files, wanted 21"
 details="$(cat "$work/capture/system-details.json")"
 expect_contains "capture redacts the serial number" "$details" '"Serial":"REDACTED"'
 expect_contains "capture keeps everything else" "$details" "NeoMatrix"
+monitoring="$(cat "$work/capture/monitoring-settings.json")"
+expect_contains "capture redacts the installer id" "$monitoring" '"InstallerId":0'
+expect_contains "capture keeps the rest of the cloud link" "$monitoring" '"LastContact"'
 ctl capture "$work/capture-raw" --no-redact >/dev/null
 expect_contains "--no-redact keeps the serial number" "$(cat "$work/capture-raw/system-details.json")" '"Serial":"FAKE'
 

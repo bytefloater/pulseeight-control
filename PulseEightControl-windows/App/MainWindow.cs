@@ -75,15 +75,14 @@ public sealed class MainWindow : Window
         // Back lives in the title bar, as in Windows Settings: always there, enabled when a page can go back.
         _titleBar.IsBackButtonVisible = true;
         _titleBar.IsBackButtonEnabled = false;
-        _titleBar.BackRequested += (_, _) => _hardware.GoBack();
         SystemBackdrop = new MicaBackdrop();
         AppWindow.Resize(new SizeInt32(1100, 780));
 
         _routing = new RoutingView(_core, port => _ = PortDialog.ShowAsync(_core, port, _snapshot));
         _hardware = new HardwareView(_core, port => _ = PortDialog.ShowAsync(_core, port, _snapshot), () => _ = ConfirmRestartAsync());
         _hardware.BackStateChanged += UpdateBackButton;
+        _titleBar.BackRequested += (_, _) => _hardware.GoBack();
         _updates = new UpdateController(DispatcherQueue, () => _snapshot.Settings.CheckForUpdates, () => _snapshot.Settings.UpdatePrereleases);
-        _updates.Changed += () => _settings.ShowUpdateState();
         _graceTimer = DispatcherQueue.CreateTimer();
         _graceTimer.IsRepeating = false;
         _graceTimer.Tick += (_, _) => { _graceTimer.Stop(); Refresh(); };
@@ -91,6 +90,7 @@ public sealed class MainWindow : Window
         _restartTimer.IsRepeating = false;
         _restartTimer.Tick += (_, _) => OnRestartTimer();
         _settings = new SettingsView(_core, _updates, BeginConnectionGrace);
+        _updates.Changed += () => _settings.ShowUpdateState();
         _about = new AboutView(_updates.Release.Description);
         _connection = new ConnectionView(_core, SelectSettings, BeginConnectionGrace);
         _navigation.PaneHeader = _matrixPicker;

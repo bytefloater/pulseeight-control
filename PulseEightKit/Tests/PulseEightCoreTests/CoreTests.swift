@@ -9,13 +9,13 @@ final class FakeTransport: HTTPTransport, @unchecked Sendable {
     private var _paths: [String] = []
     var fail = false
 
-    var paths: [String] { lock.lock(); defer { lock.unlock() }; return _paths }
+    var paths: [String] { lock.withLock { _paths } }
 
     func send(_ request: HTTPRequest) async throws -> HTTPResponse {
-        lock.lock()
-        _paths.append(request.url.path)
-        let failing = fail
-        lock.unlock()
+        let failing = lock.withLock {
+            _paths.append(request.url.path)
+            return fail
+        }
         if failing { throw TransportError("connection refused") }
         let body: String
         switch request.url.path {

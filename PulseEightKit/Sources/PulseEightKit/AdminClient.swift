@@ -50,7 +50,7 @@ public struct AdminClient: Sendable {
     public func restart(password: String) async throws {
         try await login(password)
         do {
-            try await send(HTTPRequest(method: .get, url: url("/System/Restart"), retryOnDrop: false), path: "/System/Restart")
+            _ = try await send(HTTPRequest(method: .get, url: url("/System/Restart"), retryOnDrop: false), path: "/System/Restart")
         } catch MatrixError.admin(let message) where message.hasPrefix(Self.unreachablePrefix) && message.contains(Self.droppedMarker) {
             return
         }

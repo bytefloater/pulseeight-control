@@ -21,7 +21,11 @@ private func handle(_ pointer: UnsafeMutableRawPointer?) -> Handle? {
 }
 
 private func duplicate(_ string: String) -> UnsafeMutablePointer<CChar>? {
+    #if os(Windows)
+    _strdup(string) // the POSIX name is deprecated there
+    #else
     strdup(string)
+    #endif
 }
 
 private final class ResultBox<V>: @unchecked Sendable {

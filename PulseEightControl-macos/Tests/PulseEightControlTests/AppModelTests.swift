@@ -14,14 +14,14 @@ final class RecordingTransport: HTTPTransport, @unchecked Sendable {
 
     init(_ inner: HTTPTransport) { self.inner = inner }
 
-    var paths: [String] { lock.lock(); defer { lock.unlock() }; return _paths }
+    var paths: [String] { lock.withLock { _paths } }
     func count(prefix: String) -> Int { paths.filter { $0.hasPrefix(prefix) }.count }
 
     func send(_ request: HTTPRequest) async throws -> HTTPResponse {
-        lock.lock()
-        _paths.append(request.url.path)
-        let fail = failing
-        lock.unlock()
+        let fail = lock.withLock {
+            _paths.append(request.url.path)
+            return failing
+        }
         if fail { throw TransportError("connection refused") }
         return try await inner.send(request)
     }

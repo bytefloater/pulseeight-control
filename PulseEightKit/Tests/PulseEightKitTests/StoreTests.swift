@@ -193,12 +193,13 @@ import Testing
     }
 
     @Test func connectionGoesStaleAfterThreePollsOrFifteenSeconds() async throws {
-        let (store, _, clock, recorder) = makeStore(config: MatrixConfig(host: "h", pollInterval: 2))
+        let (store, _, clock, recorder) = makeStore(config: MatrixConfig(host: "h", pollInterval: 5))
         await store.start()
         _ = await recorder.wait { $0.status.connected }
 
-        // Polling is on a real 2s timer, so the fake clock only moves inside this instant.
-        // The staleness window is max(3 * 2, 15) = 15 seconds.
+        // Polling is on a real 5s timer, so the fake clock only moves inside this instant (a poll landing between
+        // the two checks would refresh the connection and fail this on a busy machine).
+        // The staleness window is max(3 * 5, 15) = 15 seconds.
         clock.advance(14)
         #expect(await store.state.status.connected)
         clock.advance(2)

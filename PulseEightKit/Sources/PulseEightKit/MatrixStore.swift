@@ -252,7 +252,12 @@ public actor MatrixStore {
         rebuildClients(because: "asked to retry")
         await pollPorts()
         publish()
-        if system == nil { await refreshSystem() }
+        if system == nil {
+            // A fetch already under way was made on the connection just thrown away; refreshSystem() would
+            // turn this one away and "Retry now" would quietly do nothing, so let that one finish first.
+            while fetchingSystem { try? await Task.sleep(nanoseconds: 20_000_000) }
+            await refreshSystem()
+        }
         spawn { await $0.refreshDetails() }
     }
 

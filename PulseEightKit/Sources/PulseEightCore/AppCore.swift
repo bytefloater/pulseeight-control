@@ -499,6 +499,8 @@ public final class AppCore: @unchecked Sendable {
         key.status.lastPollTime = nil
         key.status.cacheAge = nil
         let update: CoreUpdate? = locked {
+            // A poll still in flight when stop() ran finishes after it; it must not bring the state back.
+            guard store != nil else { return nil }
             latestState = newState
             let phase = computePhase()
             let changed = key != publishedKey || phase != _phase

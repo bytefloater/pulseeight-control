@@ -3,17 +3,21 @@
   Builds the Setup .exe for this PC's architecture from a Release build of the app.
 
 .DESCRIPTION
-  Run build.ps1 -Configuration Release first (with -Version and the update settings for a real release).
+  Run build.ps1 -Configuration Release first (with the same version fields and the update settings for a real release).
   Needs Inno Setup 6 (ISCC.exe): on PATH, or in its usual install folders. The result is
-  out\release\PulseEightControl-Setup-<version>-<arch>.exe.
+  out\release\PulseEightControl-Setup-<version>-<arch>.exe, named by the version people see (0.2.0-rc.1).
 
 .EXAMPLE
-  .\PulseEightControl-windows\build.ps1 -Configuration Release -Version 0.1.0.7
-  .\PulseEightControl-windows\installer\build-installer.ps1 -Version 0.1.0.7
+  .\PulseEightControl-windows\build.ps1 -Configuration Release -Version 0.2.0-rc.1 -Build 0.2.0.201 -Channel rc -Label "Release Candidate 1"
+  .\PulseEightControl-windows\installer\build-installer.ps1 -Version 0.2.0-rc.1 -Build 0.2.0.201
 #>
 param(
-    # Must be the version the app was built with (build.ps1 -Version): the feed compares against it.
-    [string] $Version = '0.1.0.0',
+    # Must be what the app was built with (build.ps1 -Version and -Build). The defaults are a development build's (version.py dev).
+    [string] $Version = '0.0.0-dev',
+    [string] $Build = '0.0.0.0',
+    # Accepted so the same set of values can be splatted to both scripts; the installer doesn't use them.
+    [string] $Channel = 'dev',
+    [string] $Label = 'Development build',
     [ValidateSet('Debug', 'Release')] [string] $Configuration = 'Release'
 )
 
@@ -37,8 +41,8 @@ if (-not $iscc) { throw 'Inno Setup 6 (ISCC.exe) was not found. Install it from 
 $release = Join-Path $out 'release'
 New-Item -ItemType Directory -Force $release | Out-Null
 
-Write-Host "== Building the installer ($arch, version $Version) with $iscc"
-Invoke-Native $iscc "/DAppVersion=$Version" "/DArch=$arch" "/DSourceDir=$sourceDir" "/DOutputDir=$release" (Join-Path $PSScriptRoot 'PulseEightControl.iss')
+Write-Host "== Building the installer ($arch, version $Version, build $Build) with $iscc"
+Invoke-Native $iscc "/DAppVersion=$Version" "/DAppBuild=$Build" "/DArch=$arch" "/DSourceDir=$sourceDir" "/DOutputDir=$release" (Join-Path $PSScriptRoot 'PulseEightControl.iss')
 if ($LASTEXITCODE -ne 0) { throw 'ISCC failed' }
 
 $setup = Join-Path $release "PulseEightControl-Setup-$Version-$arch.exe"

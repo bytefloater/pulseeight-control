@@ -12,7 +12,7 @@ public sealed record LabeledValue(string Label, string Value, bool? Ok = null, s
 public sealed record SettingsSnapshot(
     string Appearance, bool HighlightGrid, bool ShowStatusBar,
     string? Host, int Port, int Timeout, int PollInterval, int DetailPollInterval,
-    string Language = "system", bool CheckForUpdates = true);
+    string Language = "system", bool CheckForUpdates = true, bool? UpdatePrereleases = null);
 
 /// <summary>One configured matrix. The admin password itself is never part of a snapshot.</summary>
 public sealed record MatrixSnapshot(

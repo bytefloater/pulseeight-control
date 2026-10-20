@@ -46,6 +46,20 @@ public sealed class SnapshotTests
         Assert.False(Snapshot.Parse(json).Settings.CheckForUpdates);
     }
 
+    [Theory]
+    [InlineData("\"updatePrereleases\":true,", true)]
+    [InlineData("\"updatePrereleases\":false,", false)]
+    [InlineData("", null)] // absent: follow the installed build
+    public void ReadsThePreReleaseChoiceWhereAnAbsentOneMeansFollowTheBuild(string field, bool? expected)
+    {
+        var json = $$"""
+        {"schema":1,"phase":"notConfigured","summary":"","hostLabel":"","adminConfigured":false,"language":"en","languages":[],
+         "settings":{"appearance":"system","highlightGrid":true,"showStatusBar":true,"checkForUpdates":true,{{field}}"language":"system","port":80,"timeout":10,"pollInterval":5,"detailPollInterval":20},
+         "inputs":[],"outputs":[],"systemRows":[],"featureRows":[],"updates":[],"edidProfiles":[]}
+        """;
+        Assert.Equal(expected, Snapshot.Parse(json).Settings.UpdatePrereleases);
+    }
+
     [Fact]
     public void ReadsTheMatricesHealthRowsAndSystemError()
     {

@@ -256,6 +256,24 @@ public sealed class CoreClientTests(FakeMatrixFixture fake)
     }
 
     [CoreFact]
+    public async Task ThePreReleaseChoiceStartsUnsetCanBeSetAndClearedAndIsRemembered()
+    {
+        using (var first = new CoreClient())
+        {
+            Assert.Null(first.Snapshot.Settings.UpdatePrereleases);
+            Assert.True((await first.SetUpdatePrereleasesAsync(true)).Ok);
+            Assert.True(first.Snapshot.Settings.UpdatePrereleases);
+            Assert.True((await first.SetUpdatePrereleasesAsync(false)).Ok);
+            Assert.False(first.Snapshot.Settings.UpdatePrereleases);
+        }
+
+        using var second = new CoreClient();
+        Assert.False(second.Snapshot.Settings.UpdatePrereleases);
+        Assert.True((await second.SetUpdatePrereleasesAsync(null)).Ok);
+        Assert.Null(second.Snapshot.Settings.UpdatePrereleases);
+    }
+
+    [CoreFact]
     public async Task MalformedFieldsAreRefusedNotFatal()
     {
         using var core = new CoreClient();

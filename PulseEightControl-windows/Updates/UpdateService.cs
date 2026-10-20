@@ -1,5 +1,6 @@
 using System.Text;
 using NetSparkleUpdater;
+using NetSparkleUpdater.AppCastHandlers;
 using NetSparkleUpdater.Configurations;
 using NetSparkleUpdater.Enums;
 using NetSparkleUpdater.Interfaces;
@@ -26,6 +27,9 @@ public sealed class UpdateService : IUpdateService
 
     public event Action? ExitRequested;
 
+    /// <inheritdoc />
+    public bool IncludePrereleases { get; set; }
+
     public UpdateService(UpdateOptions options)
     {
         var accessor = new FixedAssemblyAccessor(options.ApplicationName, options.InstalledVersion);
@@ -41,6 +45,9 @@ public sealed class UpdateService : IUpdateService
             // The installer starts the app again (a [Run] entry for silent installs), so NetSparkle mustn't.
             RelaunchAfterUpdate = false,
         };
+        // Our own filter rather than NetSparkle's ChannelAppCastFilter, whose behaviour with no channels listed isn't spelled out:
+        // this one does exactly what the feeds are built for (see PrereleaseChannelFilter).
+        _sparkle.AppCastHelper.AppCastFilter = new PrereleaseChannelFilter(() => IncludePrereleases);
         if (options.DownloadFolder is { Length: > 0 } folder)
         {
             Directory.CreateDirectory(folder);
@@ -184,4 +191,19 @@ internal sealed class FixedAssemblyAccessor(string applicationName, string versi
     public string AssemblyTitle => applicationName;
     public string AssemblyProduct => applicationName;
     public string AssemblyVersion => version;
+}
+
+/// <summary>Which feed items may be offered. An item with no channel (a release) is always eligible. An item on a channel (a
+/// release candidate, <c>rc</c>, or a beta, <c>beta</c>) is eligible only when pre-releases are on. Anything not newer than
+/// what is installed is dropped (NetSparkle skips its own check for that when a filter is set).</summary>
+internal sealed class PrereleaseChannelFilter(Func<bool> includePrereleases) : IAppCastFilter
+{
+    public IEnumerable<AppCastItem> GetFilteredAppCastItems(SemVerLike installed, IEnumerable<AppCastItem> items) =>
+        items.Where(item => Allowed(item) && item.SemVerLikeVersion.CompareTo(installed) > 0);
+
+    private bool Allowed(AppCastItem item)
+    {
+        if (string.IsNullOrWhiteSpace(item.Channel)) return true;
+        return includePrereleases() && ReleaseInfo.PreReleaseChannels.Contains(item.Channel.Trim(), StringComparer.OrdinalIgnoreCase);
+    }
 }

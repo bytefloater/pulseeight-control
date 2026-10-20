@@ -19,12 +19,23 @@ internal sealed class UpdateController : IDisposable
     private readonly IUpdateService? _service;
     private readonly DispatcherQueue _queue;
     private readonly Func<bool> _automaticChecksOn;
+    private readonly Func<bool?> _prereleaseSetting;
     private DispatcherQueueTimer? _timer;
     private string? _laterVersion;
     private bool _offering;
 
-    /// <summary>What this build is, as the feed compares it ("0.1.0.42").</summary>
+    /// <summary>What this build is, as the feed compares it ("0.1.0.201"): the build number derived from the release tag.</summary>
     public string InstalledVersion { get; }
+
+    /// <summary>What the build says it is: version, channel and label, as stamped when it was built (a development build says so).</summary>
+    public ReleaseInfo Release { get; }
+
+    /// <summary>The version as people read it ("0.1.0-rc.1"), for dialogs; a development build has only its build number.</summary>
+    public string InstalledDisplay => Release.IsDevelopment ? InstalledVersion : Release.Version;
+
+    /// <summary>Whether release candidates and betas are offered: what was chosen, or until then what this build is (a beta
+    /// keeps getting betas).</summary>
+    public bool IncludePrereleases => _prereleaseSetting() ?? Release.IsPrerelease;
 
     /// <summary>False for builds without a feed and key; the settings page says so.</summary>
     public bool IsAvailable => _service != null;
@@ -36,12 +47,14 @@ internal sealed class UpdateController : IDisposable
     /// <summary>Raised on the UI thread when <see cref="Busy"/> or <see cref="LastChecked"/> changed.</summary>
     public event Action? Changed;
 
-    public UpdateController(DispatcherQueue queue, Func<bool> automaticChecksOn)
+    public UpdateController(DispatcherQueue queue, Func<bool> automaticChecksOn, Func<bool?> prereleaseSetting)
     {
         _queue = queue;
         _automaticChecksOn = automaticChecksOn;
+        _prereleaseSetting = prereleaseSetting;
 
         var assembly = typeof(UpdateController).Assembly;
+        Release = ReleaseInfo.FromAssembly(assembly);
         InstalledVersion = (assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
                             ?? assembly.GetName().Version?.ToString() ?? "0.0.0").Split('+')[0];
 
@@ -93,6 +106,7 @@ internal sealed class UpdateController : IDisposable
         SetBusy(true);
         try
         {
+            _service.IncludePrereleases = IncludePrereleases; // read at each check, so a change is picked up by the next one
             var result = await _service.CheckAsync();
             LastChecked = DateTimeOffset.Now;
             SetBusy(false);
@@ -106,7 +120,7 @@ internal sealed class UpdateController : IDisposable
                     _offering = true;
                     try
                     {
-                        var decision = await UpdateDialog.ShowAsync(_service, offer, InstalledVersion);
+                        var decision = await UpdateDialog.ShowAsync(_service, offer, InstalledDisplay);
                         if (decision == UpdateDecision.Later) _laterVersion = offer.Version;
                     }
                     finally { _offering = false; }
@@ -115,7 +129,7 @@ internal sealed class UpdateController : IDisposable
                     await Dialogs.ErrorAsync(Loc.T("settings.updates"), Loc.F("update.checkFailed", result.Error ?? Loc.T("common.unknownError")));
                     break;
                 case UpdateCheckStatus.UpToDate when userInitiated:
-                    await Dialogs.ErrorAsync(Loc.T("settings.updates"), Loc.F("update.upToDate", InstalledVersion));
+                    await Dialogs.ErrorAsync(Loc.T("settings.updates"), Loc.F("update.upToDate", InstalledDisplay));
                     break;
             }
         }

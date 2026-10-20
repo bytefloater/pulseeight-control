@@ -1,15 +1,22 @@
 #!/usr/bin/env python3
 """Builds and edits Sparkle-style update feeds (appcasts) for the macOS and Windows apps.
 
-    appcast.py add FEED --version 12 --short 0.2.0 --url https://.../App-0.2.0.dmg --length 123456 \\
-                        --signature BASE64 [--min-os 14.0] [--notes-file notes.html]
-    appcast.py remove FEED --version 12        # yank a release: clients stop being offered it
-    appcast.py validate FEED [--allow-http]
+    appcast.py add FEED --version 0.2.0.300 --short 0.2.0 --url https://.../App-0.2.0.dmg --length 123456 \\
+                        --signature BASE64 [--channel rc|beta] [--min-os 14.0] [--notes-file notes.html]
+    appcast.py remove FEED --version 0.2.0.300     # yank a release: clients stop being offered it
+    appcast.py validate FEED [--allow-http] [--strict]
     appcast.py show FEED
 
 Sparkle compares sparkle:version (the build number), so it must increase with every release; the order of
-items in the file doesn't matter to it, but this script keeps them newest first. Adding a version that is
-already there replaces it, so re-running a release job is safe. Standard library only.
+items in the file doesn't matter to it, but this script keeps them newest first.
+
+A pre-release carries `<sparkle:channel>` (rc or beta). Both Sparkle and NetSparkle offer an item with no channel to
+everyone and an item with a channel only to apps that asked for that channel, so one feed holds every kind of release.
+
+A version is only ever added once: adding one that is already there is an error unless --replace says that is the
+intent (to correct a feed by hand). `validate --strict` (what the release workflow runs) also requires every item to
+be one of this project's release versions (see version.py) with the channel and build number that version dictates.
+Standard library only.
 """
 
 import argparse
@@ -17,7 +24,11 @@ import base64
 import email.utils
 import datetime
 import sys
+import os
 import xml.etree.ElementTree as ET
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import version as release_version  # noqa: E402  (the one definition of what a release version is)
 
 SPARKLE = "http://www.andymatuschak.org/xml-namespaces/sparkle"
 DC = "http://purl.org/dc/elements/1.1/"
@@ -94,13 +105,20 @@ def item_version(item):
 # --- editing ---------------------------------------------------------------------------------------------
 
 
+CHANNELS = ("rc", "beta")
+
+
 def build_item(*, version, short, url, length, signature, min_os=None, os_name=None, notes=None,
-               pub_date=None, signature_attribute="edSignature", title=None):
+               pub_date=None, signature_attribute="edSignature", title=None, channel=None):
     item = ET.Element("item")
     ET.SubElement(item, "title").text = title or short
     ET.SubElement(item, "pubDate").text = pub_date or email.utils.format_datetime(datetime.datetime.now(datetime.timezone.utc))
     ET.SubElement(item, s("version")).text = str(version)
     ET.SubElement(item, s("shortVersionString")).text = short
+    if channel:
+        if channel not in CHANNELS:
+            raise FeedError(f"Channel '{channel}' isn't one of {', '.join(CHANNELS)} (a release has no channel).")
+        ET.SubElement(item, s("channel")).text = channel
     if min_os:
         ET.SubElement(item, s("minimumSystemVersion")).text = min_os
     if notes:
@@ -112,12 +130,15 @@ def build_item(*, version, short, url, length, signature, min_os=None, os_name=N
     return item
 
 
-def add_item(tree, item):
-    """Puts `item` in, replacing any item with the same version, and keeps newest first."""
+def add_item(tree, item, replace=False):
+    """Puts `item` in and keeps newest first. A version that is already there is an error, unless `replace`."""
     channel = channel_of(tree)
     version = item_version(item)
     for existing in items(channel):
         if item_version(existing) == version:
+            if not replace:
+                raise FeedError(f"Version {version} is already in the feed. A release is only ever added once; "
+                                f"pass --replace only to correct the feed by hand.")
             channel.remove(existing)
     channel.append(item)
     sort_items(channel)
@@ -193,6 +214,31 @@ def problems(tree, allow_http=False):
     return found
 
 
+def release_problems(tree):
+    """What `validate --strict` adds: every item is one of this project's releases, with the channel and the build number
+    that its version string dictates (version.py), so the feed can never disagree with what the apps report."""
+    found = []
+    try:
+        channel = channel_of(tree)
+    except FeedError:
+        return found
+    for item in items(channel):
+        short = item.findtext(s("shortVersionString"), "").strip()
+        label = f"{short or '?'}"
+        parsed = release_version.parse_semver(short)
+        if parsed is None:
+            found.append(f"{label}: isn't a release version (expected 0.1.0, 0.1.0-rc.1 or 0.1.0-beta.1)")
+            continue
+        build = (item.findtext(s("version")) or "").strip()
+        if build != parsed.build:
+            found.append(f"{label}: sparkle:version is {build or 'missing'} but {short} must be {parsed.build}")
+        declared = (item.findtext(s("channel")) or "").strip()
+        expected = parsed.channel if parsed.is_prerelease else ""
+        if declared != expected:
+            found.append(f"{label}: its channel is '{declared or 'none'}' but it must be '{expected or 'none'}'")
+    return found
+
+
 # --- command line ----------------------------------------------------------------------------------------
 
 
@@ -218,6 +264,8 @@ def main(argv):
     add.add_argument("--os", dest="os_name", help="sparkle:os on the enclosure, e.g. windows")
     add.add_argument("--signature-attribute", default="edSignature", choices=["edSignature", "signature"],
                      help="Sparkle reads edSignature; NetSparkle reads signature unless told otherwise")
+    add.add_argument("--channel", choices=CHANNELS, help="rc or beta; leave out for a release (offered to everyone)")
+    add.add_argument("--replace", action="store_true", help="replace the version if it is already in the feed (by-hand corrections only)")
     add.add_argument("--notes", help="release notes (plain text or HTML)")
     add.add_argument("--notes-file")
     add.add_argument("--pub-date", help="RFC 2822 date (default: now)")
@@ -231,6 +279,8 @@ def main(argv):
     validate = sub.add_parser("validate", help="check a feed")
     validate.add_argument("feed")
     validate.add_argument("--allow-http", action="store_true", help="allow http:// download URLs (local testing only)")
+    validate.add_argument("--strict", action="store_true",
+                          help="also require release versions, with the channel and build number each one dictates")
 
     show = sub.add_parser("show", help="list the releases in a feed")
     show.add_argument("feed")
@@ -245,7 +295,7 @@ def main(argv):
             add_item(tree, build_item(
                 version=args.version, short=args.short, url=args.url, length=args.length, signature=args.signature,
                 min_os=args.min_os, os_name=args.os_name, notes=read_notes(args), pub_date=args.pub_date,
-                signature_attribute=args.signature_attribute))
+                signature_attribute=args.signature_attribute, channel=args.channel), replace=args.replace)
             save(tree, args.feed)
             print(f"{args.feed}: version {args.version} ({args.short}) added")
         elif args.command == "remove":
@@ -254,7 +304,8 @@ def main(argv):
             save(tree, args.feed)
             print(f"{args.feed}: version {args.version} removed")
         elif args.command == "validate":
-            found = problems(load(args.feed), allow_http=args.allow_http)
+            tree = load(args.feed)
+            found = problems(tree, allow_http=args.allow_http) + (release_problems(tree) if args.strict else [])
             for problem in found:
                 print(f"{args.feed}: {problem}", file=sys.stderr)
             if found:
@@ -263,7 +314,9 @@ def main(argv):
         elif args.command == "show":
             for item in items(channel_of(load(args.feed))):
                 enclosure = item.find("enclosure")
-                print(f"{item_version(item):>8}  {item.findtext(s('shortVersionString'), '?'):<12} {enclosure.get('url') if enclosure is not None else ''}")
+                channel = item.findtext(s("channel"), "")
+                print(f"{item_version(item):>12}  {item.findtext(s('shortVersionString'), '?'):<14} {channel or 'release':<8} "
+                      f"{enclosure.get('url') if enclosure is not None else ''}")
     except (FeedError, FileNotFoundError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

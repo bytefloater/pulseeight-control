@@ -13,15 +13,21 @@
   .\PulseEightControl-windows\build.ps1 -Configuration Release
 
 .EXAMPLE
-  # A release build: the version the update feed compares against, where the feed is, and the key it must be signed with.
-  .\PulseEightControl-windows\build.ps1 -Configuration Release -Version 0.1.0.7 `
-      -UpdateBaseUrl https://example.github.io/releases -UpdatePublicKey <base64>
+  # A release build. The four version values come from the release tag (python3 scripts/release/version.py fields v0.2.0.rc-01),
+  # then where the feed is and the key it must be signed with.
+  .\PulseEightControl-windows\build.ps1 -Configuration Release -Version 0.2.0-rc.1 -Build 0.2.0.201 `
+      -Channel rc -Label "Release Candidate 1" -UpdateBaseUrl https://example.github.io/releases -UpdatePublicKey <base64>
 #>
 param(
     [ValidateSet('Debug', 'Release')] [string] $Configuration = 'Debug',
     [switch] $Run,
-    # <VERSION>.<build>. The feed's sparkle:version is compared against this, so it must rise with every release.
-    [string] $Version = '0.1.0.0',
+    # The release's version fields, from its tag (scripts/release/version.py). The defaults are a development build's
+    # (version.py dev); test_version.py checks they match. -Version is what people see; -Build is what the update feed compares
+    # (sparkle:version), derived from the tag so it always rises with the release.
+    [string] $Version = '0.0.0-dev',
+    [string] $Build = '0.0.0.0',
+    [string] $Channel = 'dev',
+    [string] $Label = 'Development build',
     # Compiled in only when both are given; a build without them never checks for updates.
     [string] $UpdateBaseUrl = '',
     [string] $UpdatePublicKey = ''
@@ -58,7 +64,7 @@ if ($UpdateBaseUrl -or $UpdatePublicKey) {
     if (-not ($UpdateBaseUrl -and $UpdatePublicKey)) { throw 'Give both -UpdateBaseUrl and -UpdatePublicKey, or neither.' }
     $update = @("-p:P8UpdateBaseUrl=$UpdateBaseUrl", "-p:P8UpdatePublicKey=$UpdatePublicKey")
 }
-Invoke-Native dotnet build (Join-Path $PSScriptRoot 'App') -c $Configuration "-p:Platform=$platform" "-p:P8Version=$Version" @update
+Invoke-Native dotnet build (Join-Path $PSScriptRoot 'App') -c $Configuration "-p:Platform=$platform" "-p:P8Version=$Version" "-p:P8Build=$Build" "-p:P8Channel=$Channel" "-p:P8Label=$Label" @update
 if ($LASTEXITCODE -ne 0) { throw 'dotnet build failed' }
 
 $exe = Join-Path $out "windows\bin\PulseEightControl\$($Configuration.ToLower())_win-$($platform.ToLower())\PulseEightControl.exe"

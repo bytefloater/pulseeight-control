@@ -82,7 +82,7 @@ public sealed class MainWindow : Window
         _routing = new RoutingView(_core, port => _ = PortDialog.ShowAsync(_core, port, _snapshot));
         _hardware = new HardwareView(_core, port => _ = PortDialog.ShowAsync(_core, port, _snapshot), () => _ = ConfirmRestartAsync());
         _hardware.BackStateChanged += UpdateBackButton;
-        _updates = new UpdateController(DispatcherQueue, () => _snapshot.Settings.CheckForUpdates);
+        _updates = new UpdateController(DispatcherQueue, () => _snapshot.Settings.CheckForUpdates, () => _snapshot.Settings.UpdatePrereleases);
         _updates.Changed += () => _settings.ShowUpdateState();
         _graceTimer = DispatcherQueue.CreateTimer();
         _graceTimer.IsRepeating = false;
@@ -91,7 +91,7 @@ public sealed class MainWindow : Window
         _restartTimer.IsRepeating = false;
         _restartTimer.Tick += (_, _) => OnRestartTimer();
         _settings = new SettingsView(_core, _updates, BeginConnectionGrace);
-        _about = new AboutView(_updates.InstalledVersion);
+        _about = new AboutView(_updates.Release.Description);
         _connection = new ConnectionView(_core, SelectSettings, BeginConnectionGrace);
         _navigation.PaneHeader = _matrixPicker;
         _matrixPicker.Visibility = Visibility.Collapsed;
@@ -187,7 +187,7 @@ public sealed class MainWindow : Window
         _titleBar.Title = Loc.T("app.title");
         ApplyNavigationText();
         _settings = new SettingsView(_core, _updates, BeginConnectionGrace);
-        _about = new AboutView(_updates.InstalledVersion);
+        _about = new AboutView(_updates.Release.Description);
         _connection = new ConnectionView(_core, SelectSettings, BeginConnectionGrace);
         _matrixSignature = ""; // the picker holds text too
         _routing.Invalidate();

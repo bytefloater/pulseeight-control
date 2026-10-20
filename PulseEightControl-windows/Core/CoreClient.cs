@@ -170,6 +170,11 @@ public sealed class CoreClient : IDisposable
     public Task<CommandResult> SetCheckForUpdatesAsync(bool on) =>
         CallAsync("setCheckForUpdates", new Dictionary<string, object?> { ["on"] = on });
 
+    /// <summary>Whether updates may be release candidates and betas as well as releases. Null goes back to following the
+    /// installed build (a pre-release build keeps getting pre-releases). The updater reads <c>Settings.UpdatePrereleases</c>.</summary>
+    public Task<CommandResult> SetUpdatePrereleasesAsync(bool? on) =>
+        CallAsync("setUpdatePrereleases", new Dictionary<string, object?> { ["on"] = on });
+
     public Task<CommandResult> ValidatePortNameAsync(string name) =>
         CallAsync("validatePortName", new Dictionary<string, object?> { ["name"] = name });
 

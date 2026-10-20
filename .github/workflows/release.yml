@@ -1,8 +1,10 @@
 name: Release
 
-# Pushing a tag such as v0.2.0 builds, signs and publishes that version. A tag with a suffix (v0.2.0-rc.1) is
-# published as a GitHub pre-release and is NOT offered to installed apps. Run it by hand with "publish" off for a
-# dry run that builds and signs everything but publishes nothing.
+# The release tag is the only source of the version. Pushing v0.2.0 releases 0.2.0, v0.2.0.rc-01 is release candidate 1 of it and
+# v0.2.0.beta-01 is beta 1 (scripts/release/version.py is the one definition; anything else fails in the first job, before a macOS
+# or Windows runner starts). Every version can be released once. A release goes to everyone; a release candidate or beta goes
+# only to people who have turned on "Include pre-releases" (a channel in the update feeds). Run it by hand with the version it
+# would release for a dry run: it checks, builds and signs everything and publishes nothing.
 #
 # Setup (once): docs/releasing.md. Repository variables: RELEASES_REPO (owner/name of the public releases
 # repository), UPDATE_BASE_URL (where its feeds are served), SPARKLE_PUBLIC_KEY (the update public key; the
@@ -10,11 +12,15 @@ name: Release
 # RELEASE_REPO_TOKEN (can write to the releases repository only).
 on:
   push:
-    tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
+    tags: ["v[0-9]*"]
   workflow_dispatch:
     inputs:
-      publish:
-        description: "Publish to the releases repository (leave off for a dry run)"
+      version:
+        description: "The version to dry-run, as its tag would be (v0.2.0, v0.2.0.rc-01, v0.2.0.beta-01)"
+        type: string
+        required: true
+      allow_older:
+        description: "Allow a version older than the newest release (publishing an older line)"
         type: boolean
         default: false
 
@@ -22,53 +28,99 @@ permissions:
   contents: read
 
 jobs:
-  # The tag, VERSION and the configuration have to agree before anything is built.
+  # The first job, on the cheapest runner. It decides what is being released and whether it may be, so a malformed or
+  # already-released version stops here and no macOS or Windows runner is ever started for it.
   verify:
     name: Verify
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
       version: ${{ steps.read.outputs.version }}
-      prerelease: ${{ steps.read.outputs.prerelease }}
-      publish: ${{ steps.read.outputs.publish }}
+      semver: ${{ steps.read.outputs.semver }}
+      build: ${{ steps.read.outputs.build }}
+      channel: ${{ steps.read.outputs.channel }}
+      label: ${{ steps.read.outputs.label }}
+      title: ${{ steps.read.outputs.title }}
       tag: ${{ steps.read.outputs.tag }}
+      prerelease: ${{ steps.read.outputs.prerelease }}
+      publish: ${{ steps.publish.outputs.publish }}
+      previous: ${{ steps.previous.outputs.previous }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # release notes start at the previous tag
 
+      # The version comes from the tag (or, for a dry run, from the version typed in) and from nowhere else.
       - id: read
         env:
           REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
-          REQUESTED_PUBLISH: ${{ inputs.publish }}
+          REQUESTED: ${{ inputs.version }}
+        run: |
+          candidate="$REF_NAME"
+          [ "$REF_TYPE" = tag ] || candidate="$REQUESTED"
+          [ -n "$candidate" ] || { echo "::error::No version: a manual run needs the version to dry-run." >&2; exit 1; }
+          python3 scripts/release/version.py fields "$candidate" --github-output "$GITHUB_OUTPUT" || {
+            echo "::error::$candidate isn't a release version (see scripts/release/version.py)." >&2; exit 1; }
+
+      - id: publish
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          publish=false
+          [ "$REF_TYPE" = tag ] && publish=true
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+
+      # Everything a release needs to be possible, before anything is built: the settings that publishing uses, and that
+      # the version hasn't been released (it is in no update feed), isn't a pre-release of something already released,
+      # and comes after what is.
+      - name: Check the release can be made
+        env:
+          CANDIDATE: ${{ steps.read.outputs.tag }}
+          PUBLISH: ${{ steps.publish.outputs.publish }}
+          ALLOW_OLDER: ${{ inputs.allow_older }}
           RELEASES_REPO: ${{ vars.RELEASES_REPO }}
           UPDATE_BASE_URL: ${{ vars.UPDATE_BASE_URL }}
           SPARKLE_PUBLIC_KEY: ${{ vars.SPARKLE_PUBLIC_KEY }}
+          GH_TOKEN: ${{ secrets.RELEASE_REPO_TOKEN }}
         run: |
-          version="$(tr -d '[:space:]' < VERSION)"
-          publish=false
-          if [ "$REF_TYPE" = tag ]; then
-            publish=true
-            [ "$REF_NAME" = "v$version" ] || [ "${REF_NAME%%-*}" = "v$version" ] || {
-              echo "::error::The tag $REF_NAME doesn't match VERSION ($version). Change VERSION first." >&2
-              exit 1
-            }
-          elif [ "$REQUESTED_PUBLISH" = true ]; then
-            publish=true
-          fi
-          prerelease=false
-          case "$REF_NAME" in *-*) [ "$REF_TYPE" = tag ] && prerelease=true ;; esac
-
-          if [ "$publish" = true ]; then
-            for name in RELEASES_REPO UPDATE_BASE_URL SPARKLE_PUBLIC_KEY; do
+          if [ "$PUBLISH" = true ]; then
+            for name in RELEASES_REPO UPDATE_BASE_URL SPARKLE_PUBLIC_KEY GH_TOKEN; do
               eval "value=\${$name}"
-              [ -n "$value" ] || { echo "::error::The repository variable $name isn't set (docs/releasing.md)." >&2; exit 1; }
+              [ -n "$value" ] || { echo "::error::$name isn't set (docs/releasing.md)." >&2; exit 1; }
             done
           fi
-          # The release in the releases repository is named after the tag that started this run (v0.2.0 or
-          # v0.2.0-rc.1), never just after VERSION, so a pre-release can't take the real release's name.
-          tag="v$version"
-          [ "$REF_TYPE" = tag ] && tag="$REF_NAME"
-          { echo "version=$version"; echo "prerelease=$prerelease"; echo "publish=$publish"; echo "tag=$tag"; } >> "$GITHUB_OUTPUT"
+
+          mkdir -p feeds
+          flags=""
+          if [ -n "$GH_TOKEN" ] && [ -n "$RELEASES_REPO" ]; then
+            for name in appcast-macos.xml appcast-windows-x64.xml appcast-windows-arm64.xml; do
+              if body="$(gh api -H 'Accept: application/vnd.github.raw' "repos/$RELEASES_REPO/contents/$name" 2>feeds/error)"; then
+                printf '%s\n' "$body" > "feeds/$name"
+                flags="$flags --feed feeds/$name"
+              elif grep -q 'HTTP 404' feeds/error; then
+                echo "$name isn't in $RELEASES_REPO yet: nothing has been offered on that feed."
+              else
+                # A failed read must never pass for "nothing released", or the duplicate check would be skipped.
+                echo "::error::Couldn't read $name from $RELEASES_REPO: $(cat feeds/error)" >&2
+                exit 1
+              fi
+            done
+          else
+            echo "::warning::No releases repository access here, so what is already released can't be checked."
+          fi
+          [ "$ALLOW_OLDER" = true ] && flags="$flags --allow-older"
+          # shellcheck disable=SC2086
+          python3 scripts/release/version.py check "$CANDIDATE" $flags
+
+      - id: previous
+        env:
+          CANDIDATE: ${{ steps.read.outputs.tag }}
+        run: |
+          git tag --list 'v*' > tags.txt
+          previous="$(python3 scripts/release/version.py previous "$CANDIDATE" --tags tags.txt)"
+          echo "Release notes start at: ${previous:-the beginning}"
+          echo "previous=$previous" >> "$GITHUB_OUTPUT"
 
   # The same checks as every pull request, so a release never ships what CI wouldn't pass.
   checks:
@@ -81,25 +133,38 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 45
     env:
-      VERSION: ${{ needs.verify.outputs.version }}
+      SEMVER: ${{ needs.verify.outputs.semver }}
+      BUILD: ${{ needs.verify.outputs.build }}
+      CHANNEL: ${{ needs.verify.outputs.channel }}
+      LABEL: ${{ needs.verify.outputs.label }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # Sparkle only moves forward: the build number must be higher than the last release's. The run number
-      # of this workflow always is (it only counts up), as long as this file keeps its name.
+      # Sparkle only moves forward, and compares the build number. It is derived from the tag (version.py), so it is the same
+      # for a re-run and can't repeat.
       - name: Build the app and the disk image
         env:
-          P8_VERSION: ${{ env.VERSION }}
-          P8_BUILD: ${{ github.run_number }}
+          P8_VERSION: ${{ needs.verify.outputs.semver }}
+          P8_BUILD: ${{ needs.verify.outputs.build }}
+          P8_CHANNEL: ${{ needs.verify.outputs.channel }}
+          P8_LABEL: ${{ needs.verify.outputs.label }}
           P8_UPDATE_FEED_URL: ${{ vars.UPDATE_BASE_URL && vars.SPARKLE_PUBLIC_KEY && format('{0}/appcast-macos.xml', vars.UPDATE_BASE_URL) || '' }}
           P8_SPARKLE_PUBLIC_KEY: ${{ vars.SPARKLE_PUBLIC_KEY }}
         run: |
           PulseEightControl-macos/package.sh release --universal
           mkdir -p out/release
-          scripts/release/make-dmg.sh out/macos/PulseEightControl.app "out/release/PulseEightControl-$VERSION.dmg"
+          scripts/release/make-dmg.sh out/macos/PulseEightControl.app "out/release/PulseEightControl-$SEMVER.dmg"
           lipo -archs out/macos/PulseEightControl.app/Contents/MacOS/PulseEightControl
+
+          # The app has to report exactly the version that was verified: what its About page and the updater see.
+          plist=out/macos/PulseEightControl.app/Contents/Info.plist
+          expect() { [ "$(/usr/libexec/PlistBuddy -c "Print :$1" "$plist")" = "$2" ] || { echo "::error::The built app's $1 isn't '$2'." >&2; exit 1; }; }
+          expect CFBundleShortVersionString "$SEMVER"
+          expect CFBundleVersion "$BUILD"
+          expect P8ReleaseChannel "$CHANNEL"
+          expect P8ReleaseLabel "$LABEL"
+          echo "The built app reports $SEMVER (build $BUILD, $LABEL)."
           if [ -n "$P8_UPDATE_FEED_URL" ]; then
-            plist=out/macos/PulseEightControl.app/Contents/Info.plist
             [ "$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$plist")" = "$P8_UPDATE_FEED_URL" ] || { echo "::error::The built app doesn't carry the feed address." >&2; exit 1; }
             [ "$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$plist")" = "$P8_SPARKLE_PUBLIC_KEY" ] || { echo "::error::The built app doesn't carry the public key." >&2; exit 1; }
             echo "The built app carries the feed address and public key."
@@ -110,7 +175,7 @@ jobs:
           ED25519_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
           SPARKLE_PUBLIC_KEY: ${{ vars.SPARKLE_PUBLIC_KEY }}
         run: |
-          dmg="out/release/PulseEightControl-$VERSION.dmg"
+          dmg="out/release/PulseEightControl-$SEMVER.dmg"
           if [ -z "$ED25519_PRIVATE_KEY" ]; then
             echo "::warning::No SPARKLE_ED_PRIVATE_KEY secret: this build is unsigned and cannot be offered as an update."
             exit 0
@@ -166,31 +231,38 @@ jobs:
               if ($LASTEXITCODE -ne 0) { throw 'Installing Inno Setup failed.' }
           }
 
-      # The version is <VERSION>.<run number>: the run number only counts up, which is what the update feed
-      # needs. The feed address and public key are compiled in so the installed app can check for updates.
+      # The version is derived from the tag (version.py): the update feed compares the build, people see the version and its
+      # label. The feed address and public key are compiled in so the installed app can check for updates.
       - name: Build the app and the installer
         env:
-          P8_VERSION: ${{ needs.verify.outputs.version }}
-          P8_BUILD: ${{ github.run_number }}
+          P8_VERSION: ${{ needs.verify.outputs.semver }}
+          P8_BUILD: ${{ needs.verify.outputs.build }}
+          P8_CHANNEL: ${{ needs.verify.outputs.channel }}
+          P8_LABEL: ${{ needs.verify.outputs.label }}
           UPDATE_BASE_URL: ${{ vars.UPDATE_BASE_URL }}
           SPARKLE_PUBLIC_KEY: ${{ vars.SPARKLE_PUBLIC_KEY }}
         run: |
-          $version = "$env:P8_VERSION.$env:P8_BUILD"
           $update = @{}
           if ($env:UPDATE_BASE_URL -and $env:SPARKLE_PUBLIC_KEY) {
               $update = @{ UpdateBaseUrl = $env:UPDATE_BASE_URL; UpdatePublicKey = $env:SPARKLE_PUBLIC_KEY }
           } else {
               Write-Host '::warning::No update settings: this build will never look for updates.'
           }
-          .\PulseEightControl-windows\build.ps1 -Configuration Release -Version $version @update
-          .\PulseEightControl-windows\installer\build-installer.ps1 -Version $version
+          $release = @{ Version = $env:P8_VERSION; Build = $env:P8_BUILD; Channel = $env:P8_CHANNEL; Label = $env:P8_LABEL }
+          .\PulseEightControl-windows\build.ps1 -Configuration Release @release @update
+          .\PulseEightControl-windows\installer\build-installer.ps1 @release
+
+          # The app has to report exactly the version that was verified (its assembly carries the build and the label).
+          $dll = Get-ChildItem out\windows\bin\PulseEightControl -Recurse -Filter PulseEightControl.dll | Select-Object -First 1
+          $text = [System.Text.Encoding]::GetEncoding(28591).GetString([System.IO.File]::ReadAllBytes($dll.FullName))
+          foreach ($expected in @($env:P8_BUILD, $env:P8_VERSION, $env:P8_LABEL)) {
+              if (-not $text.Contains($expected)) { throw "The built app doesn't report '$expected'." }
+          }
+          Write-Host "The built app reports $env:P8_VERSION (build $env:P8_BUILD, $env:P8_LABEL)."
 
           # A build that silently lost its update settings would install fine and never update. Look for the
           # feed address in the app's own assembly (custom attribute values are stored as UTF-8).
           if ($update.Count -gt 0) {
-              $dll = Get-ChildItem out\windows\bin\PulseEightControl -Recurse -Filter PulseEightControl.dll | Select-Object -First 1
-              $bytes = [System.IO.File]::ReadAllBytes($dll.FullName)
-              $text = [System.Text.Encoding]::GetEncoding(28591).GetString($bytes)
               if (-not $text.Contains($env:UPDATE_BASE_URL) -or -not $text.Contains($env:SPARKLE_PUBLIC_KEY)) {
                   throw "The built app doesn't contain the update address and key; it would never update."
               }
@@ -212,9 +284,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      VERSION: ${{ needs.verify.outputs.version }}
+      TITLE: ${{ needs.verify.outputs.title }}
       PRERELEASE: ${{ needs.verify.outputs.prerelease }}
       TAG: ${{ needs.verify.outputs.tag }}
+      PREVIOUS: ${{ needs.verify.outputs.previous }}
       RELEASES_REPO: ${{ vars.RELEASES_REPO }}
       GH_TOKEN: ${{ secrets.RELEASE_REPO_TOKEN }}
     steps:
@@ -230,10 +303,9 @@ jobs:
 
       - name: Release notes
         run: |
-          previous="$(git describe --tags --abbrev=0 --match 'v*' "HEAD^" 2>/dev/null || true)"
           mkdir -p notes
-          python3 scripts/release/release_notes.py --since "$previous" --markdown > notes/notes.md
-          python3 scripts/release/release_notes.py --since "$previous" > notes/notes.html
+          python3 scripts/release/release_notes.py --since "$PREVIOUS" --markdown > notes/notes.md
+          python3 scripts/release/release_notes.py --since "$PREVIOUS" > notes/notes.html
           cat notes/notes.md
 
       - name: Checksums
@@ -246,7 +318,7 @@ jobs:
           [ "$PRERELEASE" = true ] && flags="--prerelease"
           if ! gh release view "$tag" --repo "$RELEASES_REPO" >/dev/null 2>&1; then
             # shellcheck disable=SC2086
-            gh release create "$tag" --repo "$RELEASES_REPO" --title "PulseEight Control $VERSION" --notes-file notes/notes.md $flags
+            gh release create "$tag" --repo "$RELEASES_REPO" --title "$TITLE" --notes-file notes/notes.md $flags
           fi
           gh release upload "$tag" --repo "$RELEASES_REPO" --clobber files/*.dmg files/*.exe files/SHA256SUMS
 
@@ -257,21 +329,23 @@ jobs:
           if-no-files-found: error
 
   # Signs the Windows installers and the feeds, and adds this release to the three feeds. On macOS because
-  # the signing script uses CryptoKit; it is a couple of minutes. A pre-release is published for testing and
-  # is not offered to installed apps.
+  # the signing script uses CryptoKit; it is a couple of minutes. A release is offered to everyone; a release candidate or
+  # beta is added on its own channel, so only apps that turned on pre-releases are offered it.
   offer:
     name: Offer to installed apps
     needs: [verify, publish]
-    if: ${{ needs.verify.outputs.publish == 'true' && needs.verify.outputs.prerelease != 'true' }}
+    if: ${{ needs.verify.outputs.publish == 'true' }}
     runs-on: macos-26
     timeout-minutes: 20
     env:
-      VERSION: ${{ needs.verify.outputs.version }}
+      SEMVER: ${{ needs.verify.outputs.semver }}
+      BUILD: ${{ needs.verify.outputs.build }}
+      CHANNEL: ${{ needs.verify.outputs.channel }}
+      TITLE: ${{ needs.verify.outputs.title }}
       TAG: ${{ needs.verify.outputs.tag }}
       RELEASES_REPO: ${{ vars.RELEASES_REPO }}
       BASE: ${{ vars.UPDATE_BASE_URL }}
       SPARKLE_PUBLIC_KEY: ${{ vars.SPARKLE_PUBLIC_KEY }}
-      BUILD: ${{ github.run_number }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -299,13 +373,16 @@ jobs:
           signature="$(sed -n 's/^signature=//p' files/signature.txt)"
           length="$(sed -n 's/^length=//p' files/signature.txt)"
           [ -n "$signature" ] || { echo "::error::The update wasn't signed (no SPARKLE_ED_PRIVATE_KEY), so it can't be offered." >&2; exit 1; }
+          # A release has no channel (everyone is offered it); a release candidate or beta names its own.
+          channel_args=()
+          [ "$CHANNEL" = release ] || channel_args=(--channel "$CHANNEL")
           cd releases
           python3 ../source/scripts/release/appcast.py add appcast-macos.xml \
-            --version "$BUILD" --short "$VERSION" \
-            --url "https://github.com/$RELEASES_REPO/releases/download/$TAG/PulseEightControl-$VERSION.dmg" \
+            --version "$BUILD" --short "$SEMVER" "${channel_args[@]}" \
+            --url "https://github.com/$RELEASES_REPO/releases/download/$TAG/PulseEightControl-$SEMVER.dmg" \
             --length "$length" --signature "$signature" --min-os 14.0 --notes-file ../notes/notes.html \
             --title "PulseEight Control" --link "$BASE"
-          python3 ../source/scripts/release/appcast.py validate appcast-macos.xml
+          python3 ../source/scripts/release/appcast.py validate --strict appcast-macos.xml
 
       # Each installer is signed and checked against the public key built into the app. NetSparkle (strict
       # mode) also wants the feed itself signed, in a file beside it: <feed>.signature.
@@ -315,9 +392,10 @@ jobs:
         run: |
           [ -n "$ED25519_PRIVATE_KEY" ] || { echo "::error::No SPARKLE_ED_PRIVATE_KEY secret, so the Windows updates can't be signed." >&2; exit 1; }
           sign() { swift source/scripts/release/ed25519.swift sign "$1"; }
-          windows_version="$VERSION.$BUILD"
+          channel_args=()
+          [ "$CHANNEL" = release ] || channel_args=(--channel "$CHANNEL")
           for arch in x64 arm64; do
-            name="PulseEightControl-Setup-$windows_version-$arch.exe"
+            name="PulseEightControl-Setup-$SEMVER-$arch.exe"
             installer="files/$name"
             [ -f "$installer" ] || { echo "::error::$name is missing from the build." >&2; exit 1; }
             result="$(sign "$installer")"
@@ -327,11 +405,11 @@ jobs:
 
             feed="appcast-windows-$arch.xml"
             (cd releases && python3 ../source/scripts/release/appcast.py add "$feed" \
-              --version "$windows_version" --short "$VERSION" --os windows --signature-attribute signature \
+              --version "$BUILD" --short "$SEMVER" "${channel_args[@]}" --os windows --signature-attribute signature \
               --url "https://github.com/$RELEASES_REPO/releases/download/$TAG/$name" \
               --length "$length" --signature "$signature" --notes-file ../notes/notes.html \
               --title "PulseEight Control" --link "$BASE" \
-              && python3 ../source/scripts/release/appcast.py validate "$feed")
+              && python3 ../source/scripts/release/appcast.py validate --strict "$feed")
 
             feed_signature="$(sign "releases/$feed" | sed -n 's/^signature=//p')"
             swift source/scripts/release/ed25519.swift verify "releases/$feed" "$SPARKLE_PUBLIC_KEY" "$feed_signature"
@@ -345,5 +423,5 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
           git add appcast-macos.xml appcast-windows-x64.xml appcast-windows-x64.xml.signature \
                   appcast-windows-arm64.xml appcast-windows-arm64.xml.signature
-          git commit -m "PulseEight Control $VERSION"
+          git commit -m "$TITLE"
           git push

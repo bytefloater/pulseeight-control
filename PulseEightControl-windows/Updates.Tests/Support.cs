@@ -81,7 +81,9 @@ public sealed class TestKey
     public string Sign(string text) => Sign(Encoding.UTF8.GetBytes(text));
 }
 
-public sealed record ReleaseSpec(string Version, string Short, byte[] Installer, string? Os = null, string? Notes = null, string? SignedWith = null)
+public sealed record ReleaseSpec(
+    string Version, string Short, byte[] Installer, string? Os = null, string? Notes = null, string? SignedWith = null,
+    string? Channel = null)
 {
     /// <summary>NetSparkle only offers items for the OS it runs on, and these tests run on whatever OS builds them,
     /// so "this platform's" release is marked with the host's own name (in production that is always windows).</summary>
@@ -109,12 +111,14 @@ public sealed class FeedFixture : IDisposable
             var signature = release.SignedWith ?? Key.Sign(release.Installer);
             var os = $" sparkle:os=\"{release.Os ?? ReleaseSpec.HostOs}\"";
             var notes = release.Notes is null ? "" : $"<description><![CDATA[{release.Notes}]]></description>";
+            var channel = release.Channel is null ? "" : $"<sparkle:channel>{release.Channel}</sparkle:channel>";
             items.Append($"""
                 <item>
                   <title>{release.Short}</title>
                   <pubDate>Sat, 17 Oct 2026 12:00:00 +0000</pubDate>
                   <sparkle:version>{release.Version}</sparkle:version>
                   <sparkle:shortVersionString>{release.Short}</sparkle:shortVersionString>
+                  {channel}
                   {notes}
                   <enclosure url="{Server.BaseUrl}{file}" length="{release.Installer.Length}" type="application/octet-stream"{os} sparkle:signature="{signature}" />
                 </item>

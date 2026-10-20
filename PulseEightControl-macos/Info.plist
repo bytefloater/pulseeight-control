@@ -16,10 +16,17 @@
 	<string>PulseEightControl</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
+	<!-- Placeholders for a development build (Xcode, swift run): packaging a release overwrites all four from the release
+	     tag (scripts/release/version.py), the only place a version is defined. test_version.py checks these match
+	     `version.py dev`. -->
 	<key>CFBundleShortVersionString</key>
-	<string>0.1.0</string>
+	<string>0.0.0-dev</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>0.0.0.0</string>
+	<key>P8ReleaseChannel</key>
+	<string>dev</string>
+	<key>P8ReleaseLabel</key>
+	<string>Development build</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>NSLocalNetworkUsageDescription</key>

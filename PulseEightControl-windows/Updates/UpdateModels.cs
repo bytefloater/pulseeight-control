@@ -95,6 +95,10 @@ public interface IUpdateService : IDisposable
     /// <summary>Raised when the installer is about to run and the app must close itself.</summary>
     event Action? ExitRequested;
 
+    /// <summary>Whether release candidates and betas are offered as well as releases. Read at every check, so changing it
+    /// takes effect at the next one. Off (the default) offers only releases.</summary>
+    bool IncludePrereleases { get; set; }
+
     Task<UpdateCheckResult> CheckAsync(CancellationToken cancellation = default);
 
     /// <summary>Downloads and verifies the update. Throws <see cref="UpdateException"/> if that fails.</summary>

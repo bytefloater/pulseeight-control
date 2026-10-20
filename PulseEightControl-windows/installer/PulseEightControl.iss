@@ -1,5 +1,6 @@
 ; Inno Setup script for PulseEight Control (Windows). Built by installer\build-installer.ps1, which passes:
-;   /DAppVersion=0.1.0.42   what the update feed compares against (<VERSION>.<build>)
+;   /DAppVersion=0.2.0-rc.1 the version people see (from the release tag; scripts/release/version.py)
+;   /DAppBuild=0.2.0.201    what the update feed compares against; must be four numbers (it is the file version)
 ;   /DArch=x64|arm64        which processor this installer is for
 ;   /DSourceDir=...         the folder the app was built into (the .exe and everything beside it)
 ;   /DOutputDir=...         where the Setup .exe goes
@@ -8,6 +9,9 @@
 
 #ifndef AppVersion
   #error AppVersion is required (build-installer.ps1 passes it).
+#endif
+#ifndef AppBuild
+  #error AppBuild is required (build-installer.ps1 passes it).
 #endif
 #ifndef Arch
   #error Arch is required: x64 or arm64.
@@ -24,7 +28,7 @@
 AppId={{A637F9EB-8428-4747-8E81-D8D91D7BA3F4}
 AppName=PulseEight Control
 AppVersion={#AppVersion}
-VersionInfoVersion={#AppVersion}
+VersionInfoVersion={#AppBuild}
 DefaultDirName={autopf}\PulseEight Control
 DefaultGroupName=PulseEight Control
 DisableProgramGroupPage=yes

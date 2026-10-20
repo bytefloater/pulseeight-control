@@ -53,9 +53,18 @@ class EditingTests(unittest.TestCase):
     def test_dotted_versions_compare_numerically_not_as_text(self):
         self.assertEqual(versions_of(feed_with("1.9", "1.10", "1.2")), ["1.10", "1.9", "1.2"])
 
-    def test_adding_a_version_again_replaces_it(self):
+    def test_adding_a_version_that_is_already_there_is_an_error(self):
         tree = feed_with("1", "2")
-        appcast.add_item(tree, item("2", url="https://example.com/rebuilt.dmg"))
+        with self.assertRaises(appcast.FeedError) as caught:
+            appcast.add_item(tree, item("2", url="https://example.com/rebuilt.dmg"))
+        self.assertIn("already in the feed", str(caught.exception))
+        self.assertEqual(versions_of(tree), ["2", "1"])
+        enclosure = appcast.items(appcast.channel_of(tree))[0].find("enclosure")
+        self.assertNotEqual(enclosure.get("url"), "https://example.com/rebuilt.dmg", "nothing was changed")
+
+    def test_replace_is_the_by_hand_way_to_correct_a_version(self):
+        tree = feed_with("1", "2")
+        appcast.add_item(tree, item("2", url="https://example.com/rebuilt.dmg"), replace=True)
         self.assertEqual(versions_of(tree), ["2", "1"])
         enclosure = appcast.items(appcast.channel_of(tree))[0].find("enclosure")
         self.assertEqual(enclosure.get("url"), "https://example.com/rebuilt.dmg")
@@ -94,15 +103,17 @@ class FilesTests(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             return appcast.main(list(args))
 
-    def test_the_command_line_builds_a_valid_feed_and_is_idempotent(self):
+    def test_the_command_line_builds_a_valid_feed_and_refuses_a_second_add(self):
         with tempfile.TemporaryDirectory() as folder:
             path = os.path.join(folder, "appcast.xml")
             common = ["--short", "0.2.0", "--url", "https://example.com/a.dmg", "--length", "5", "--signature", SIGNATURE,
                       "--pub-date", DATE, "--min-os", "14.0", "--title", "My App"]
             self.assertEqual(self.run_cli("add", path, "--version", "2", *common), 0)
             first = pathlib.Path(path).read_bytes()
-            self.assertEqual(self.run_cli("add", path, "--version", "2", *common), 0)
-            self.assertEqual(pathlib.Path(path).read_bytes(), first, "re-running a release must not change the feed")
+            self.assertEqual(self.run_cli("add", path, "--version", "2", *common), 1)
+            self.assertEqual(pathlib.Path(path).read_bytes(), first, "a refused add must not change the feed")
+            self.assertEqual(self.run_cli("add", path, "--version", "2", "--replace", *common), 0)
+            self.assertEqual(pathlib.Path(path).read_bytes(), first, "replacing with the same data changes nothing")
             self.assertEqual(self.run_cli("validate", path), 0)
             self.assertTrue(first.startswith(b"<?xml"))
 
@@ -152,6 +163,61 @@ class ValidationTests(unittest.TestCase):
         appcast.channel_of(tree).append(item("1", ))
         appcast.channel_of(tree).find("item").find(appcast.s("version")).text = "1.0-beta"
         self.assertTrue(any("dotted numbers" in p for p in appcast.problems(tree)))
+
+
+class ChannelTests(unittest.TestCase):
+    def test_a_pre_release_item_names_its_channel_and_a_release_names_none(self):
+        rc = ET.tostring(item("0.1.0.201", short="0.1.0-rc.1", channel="rc"), encoding="unicode")
+        release = ET.tostring(item("0.1.0.300", short="0.1.0"), encoding="unicode")
+        self.assertIn("<sparkle:channel>rc</sparkle:channel>", rc)
+        self.assertNotIn("sparkle:channel", release)
+
+    def test_only_rc_and_beta_are_channels(self):
+        with self.assertRaises(appcast.FeedError):
+            item("0.1.0.300", short="0.1.0", channel="release")
+        with self.assertRaises(appcast.FeedError):
+            item("0.1.0.300", short="0.1.0", channel="nightly")
+
+    def feed(self, *entries):
+        tree = appcast.new_feed("T")
+        for build, short, channel in entries:
+            appcast.add_item(tree, item(build, short=short, channel=channel))
+        return tree
+
+    def test_one_feed_keeps_every_channel_newest_first(self):
+        tree = self.feed(("0.1.0.201", "0.1.0-rc.1", "rc"), ("0.1.0.300", "0.1.0", None), ("0.1.0.101", "0.1.0-beta.1", "beta"))
+        self.assertEqual(versions_of(tree), ["0.1.0.300", "0.1.0.201", "0.1.0.101"])
+        self.assertEqual(appcast.problems(tree), [])
+
+    def test_strict_validation_accepts_what_the_workflow_produces(self):
+        tree = self.feed(("0.1.0.300", "0.1.0", None), ("0.1.0.201", "0.1.0-rc.1", "rc"), ("0.1.0.107", "0.1.0-beta.7", "beta"))
+        self.assertEqual(appcast.release_problems(tree), [])
+
+    def test_strict_validation_catches_a_build_number_that_does_not_match_the_version(self):
+        problems = appcast.release_problems(self.feed(("0.1.0.250", "0.1.0-rc.1", "rc")))
+        self.assertTrue(any("must be 0.1.0.201" in p for p in problems), problems)
+
+    def test_strict_validation_catches_a_wrong_or_missing_channel(self):
+        self.assertTrue(any("must be 'rc'" in p for p in appcast.release_problems(self.feed(("0.1.0.201", "0.1.0-rc.1", None)))))
+        self.assertTrue(any("must be 'none'" in p for p in appcast.release_problems(self.feed(("0.1.0.300", "0.1.0", "beta")))))
+
+    def test_strict_validation_refuses_a_version_that_is_not_ours(self):
+        problems = appcast.release_problems(self.feed(("12", "0.12.0-nightly", None)))
+        self.assertTrue(any("isn't a release version" in p for p in problems), problems)
+
+    def test_the_command_line_adds_a_channel_and_validates_strictly(self):
+        import io
+        with tempfile.TemporaryDirectory() as folder:
+            path = os.path.join(folder, "appcast.xml")
+            common = ["--url", "https://example.com/a.dmg", "--length", "5", "--signature", SIGNATURE, "--pub-date", DATE]
+            def run(*args):
+                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                    return appcast.main(list(args))
+            self.assertEqual(run("add", path, "--version", "0.1.0.201", "--short", "0.1.0-rc.1", "--channel", "rc", *common), 0)
+            self.assertEqual(run("add", path, "--version", "0.1.0.300", "--short", "0.1.0", *common), 0)
+            self.assertEqual(run("validate", path, "--strict"), 0)
+            self.assertIn("<sparkle:channel>rc</sparkle:channel>", pathlib.Path(path).read_text())
+            self.assertEqual(run("add", path, "--version", "0.1.0.201", "--short", "0.1.0-rc.1", "--channel", "rc", *common), 1)
 
 
 if __name__ == "__main__":

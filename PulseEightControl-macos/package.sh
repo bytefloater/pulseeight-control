@@ -5,8 +5,10 @@
 #   package.sh [debug|release] [--universal] [--open]
 #
 # Settings, all optional, from the environment:
-#   P8_VERSION             marketing version (default: the repository's VERSION file)
-#   P8_BUILD               build number (default: 1)
+#   P8_VERSION             the version people see, e.g. 0.2.0 or 0.2.0-rc.1       } all four come from the release tag
+#   P8_BUILD               what updaters compare, e.g. 0.2.0.201                   } (scripts/release/version.py fields);
+#   P8_CHANNEL             release, rc or beta (dev for a development build)       } defaults: a development build
+#   P8_LABEL               e.g. "Release Candidate 1"                              }
 #   P8_UPDATE_FEED_URL     where the app looks for updates         } give both or neither: an app with
 #   P8_SPARKLE_PUBLIC_KEY  the key updates must be signed with     } neither never checks for updates
 #   P8_SIGN_IDENTITY       a Developer ID Application identity to sign with (default: ad-hoc, "-")
@@ -29,8 +31,13 @@ for arg in "$@"; do
     esac
 done
 
-version="${P8_VERSION:-$(tr -d '[:space:]' < ../VERSION)}"
-build="${P8_BUILD:-1}"
+# A version comes from a release tag and nowhere else; without one this is a development build (version.py dev).
+dev="$(python3 ../scripts/release/version.py dev)"
+dev_field() { printf '%s\n' "$dev" | sed -n "s/^$1=//p"; }
+version="${P8_VERSION:-$(dev_field semver)}"
+build="${P8_BUILD:-$(dev_field build)}"
+channel="${P8_CHANNEL:-$(dev_field channel)}"
+label="${P8_LABEL:-$(dev_field label)}"
 feed="${P8_UPDATE_FEED_URL:-}"
 key="${P8_SPARKLE_PUBLIC_KEY:-}"
 if { [ -n "$feed" ] && [ -z "$key" ]; } || { [ -z "$feed" ] && [ -n "$key" ]; }; then
@@ -64,6 +71,8 @@ ditto "$sparkle" "$app/Contents/Frameworks/Sparkle.framework"
 plist="$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build" "$plist"
+/usr/libexec/PlistBuddy -c "Set :P8ReleaseChannel $channel" "$plist"
+/usr/libexec/PlistBuddy -c "Set :P8ReleaseLabel $label" "$plist"
 if [ -n "$feed" ]; then
     /usr/libexec/PlistBuddy -c "Add :SUFeedURL string $feed" "$plist"
     /usr/libexec/PlistBuddy -c "Add :SUPublicEDKey string $key" "$plist"
@@ -109,6 +118,6 @@ codesign --force --sign "$identity" --options runtime $timestamp "$framework"
 codesign --force --sign "$identity" --options runtime $timestamp $app_entitlements "$app"
 codesign --verify --deep --strict "$app"
 
-echo "Built $app ($version, build $build, $([ -n "$feed" ] && echo "updates from $feed" || echo "no update feed"))"
+echo "Built $app ($version, build $build, $label, $([ -n "$feed" ] && echo "updates from $feed" || echo "no update feed"))"
 [ "$open_after" = 1 ] && open "$app"
 exit 0

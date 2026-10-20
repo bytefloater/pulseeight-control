@@ -29,14 +29,26 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>
 
-  <!-- The version the update feed is compared against, as <VERSION>.<build> (the release workflow passes
-       -p:P8Version=...). The feed address and public key are compiled in only for release builds
-       (-p:P8UpdateBaseUrl=... -p:P8UpdatePublicKey=...); without them the app never looks for updates. -->
+  <!-- The version comes from the release tag and nowhere else (scripts/release/version.py; the release workflow passes
+       -p:P8Version=<what people see> -p:P8Build=<what the update feed compares> -p:P8Channel -p:P8Label). The defaults are a
+       development build's (version.py dev); test_version.py checks they match. `Version`, which becomes the assembly's file and
+       informational version, is the build: it is what the updater reads as the installed version.
+       The feed address and public key are compiled in only for release builds (-p:P8UpdateBaseUrl=... -p:P8UpdatePublicKey=...);
+       without them the app never looks for updates. -->
   <PropertyGroup>
-    <P8Version Condition="'$(P8Version)' == ''">0.1.0.0</P8Version>
-    <Version>$(P8Version)</Version>
+    <P8Version Condition="'$(P8Version)' == ''">0.0.0-dev</P8Version>
+    <P8Build Condition="'$(P8Build)' == ''">0.0.0.0</P8Build>
+    <P8Channel Condition="'$(P8Channel)' == ''">dev</P8Channel>
+    <P8Label Condition="'$(P8Label)' == ''">Development build</P8Label>
+    <Version>$(P8Build)</Version>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
+  <ItemGroup>
+    <AssemblyMetadata Include="ReleaseVersion" Value="$(P8Version)" />
+    <AssemblyMetadata Include="ReleaseBuild" Value="$(P8Build)" />
+    <AssemblyMetadata Include="ReleaseChannel" Value="$(P8Channel)" />
+    <AssemblyMetadata Include="ReleaseLabel" Value="$(P8Label)" />
+  </ItemGroup>
   <ItemGroup Condition="'$(P8UpdateBaseUrl)' != '' And '$(P8UpdatePublicKey)' != ''">
     <AssemblyMetadata Include="UpdateBaseUrl" Value="$(P8UpdateBaseUrl)" />
     <AssemblyMetadata Include="UpdatePublicKey" Value="$(P8UpdatePublicKey)" />

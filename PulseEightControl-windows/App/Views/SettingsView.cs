@@ -23,6 +23,7 @@ internal sealed class SettingsView : UserControl
     private readonly ToggleSwitch _highlight = new() { OnContent = "", OffContent = "", MinWidth = 0 };
     private readonly ToggleSwitch _statusBar = new() { OnContent = "", OffContent = "", MinWidth = 0 };
     private readonly ToggleSwitch _autoUpdates = new() { OnContent = "", OffContent = "", MinWidth = 0 };
+    private readonly ToggleSwitch _prereleases = new() { OnContent = "", OffContent = "", MinWidth = 0 };
     private readonly Button _checkNow = new() { Content = Loc.T("settings.updates.checkNow") };
     private readonly TextBlock _updateStatus = Ui.Text("", "CaptionTextBlockStyle", secondary: true, wrap: true);
 
@@ -49,6 +50,7 @@ internal sealed class SettingsView : UserControl
         _highlight.Toggled += async (_, _) => { if (!_loading) await _core.SetHighlightGridAsync(_highlight.IsOn); };
         _statusBar.Toggled += async (_, _) => { if (!_loading) await _core.SetShowStatusBarAsync(_statusBar.IsOn); };
         _autoUpdates.Toggled += async (_, _) => { if (!_loading) await _core.SetCheckForUpdatesAsync(_autoUpdates.IsOn); };
+        _prereleases.Toggled += async (_, _) => { if (!_loading) await _core.SetUpdatePrereleasesAsync(_prereleases.IsOn); };
         _checkNow.Click += async (_, _) => await _updates.CheckNowAsync();
 
         Content = Ui.Page(Build());
@@ -76,6 +78,7 @@ internal sealed class SettingsView : UserControl
 
         page.Children.Add(Ui.Section(Loc.T("settings.updates"), Ui.Card(
             Ui.Row(Loc.T("settings.updates.auto"), _autoUpdates, Loc.T("settings.updates.auto.caption")),
+            Ui.Row(Loc.T("settings.updates.prereleases"), _prereleases, Loc.T("settings.updates.prereleases.caption")),
             Ui.Row(Loc.T("settings.updates.checkNow"), _checkNow, null))));
         page.Children.Add(_updateStatus);
 
@@ -104,6 +107,8 @@ internal sealed class SettingsView : UserControl
             _highlight.IsOn = settings.HighlightGrid;
             _statusBar.IsOn = settings.ShowStatusBar;
             _autoUpdates.IsOn = settings.CheckForUpdates;
+            // Unset follows the installed build (a beta keeps getting betas); once chosen it is what was chosen.
+            _prereleases.IsOn = settings.UpdatePrereleases ?? _updates.Release.IsPrerelease;
             ShowMatrices(snapshot);
         }
         finally { _loading = false; }
@@ -116,10 +121,11 @@ internal sealed class SettingsView : UserControl
     {
         var available = _updates.IsAvailable;
         _autoUpdates.IsEnabled = available;
+        _prereleases.IsEnabled = available;
         _checkNow.IsEnabled = available && !_updates.Busy;
         _updateStatus.Text = !available
             ? Loc.T("settings.updates.unavailable")
-            : Loc.F("settings.updates.version", _updates.InstalledVersion) + "  \u00b7  " +
+            : Loc.F("settings.updates.version", _updates.Release.Description) + "  \u00b7  " +
               (_updates.LastChecked is { } checkedAt
                   ? Loc.F("settings.updates.lastChecked", checkedAt.ToLocalTime().ToString("g"))
                   : Loc.T("settings.updates.neverChecked"));

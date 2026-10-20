@@ -139,6 +139,9 @@ public sealed class MainWindow : Window
             args.Handled = true;
         };
         _root.KeyboardAccelerators.Add(goBack);
+        // The shortcuts are listed nowhere on screen: Windows App SDK 2.x would otherwise float a "Ctrl+1" tooltip over
+        // whatever the pointer rests on.
+        _root.KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden;
 
         _root.Loaded += (_, _) =>
         {

@@ -158,6 +158,18 @@ internal static class Ui
     }
 
     /// <summary>A scrolling page whose content is a centred column.</summary>
+    /// <summary>A ComboBox with focus takes the mouse wheel to change its selection, so scrolling a page with the pointer
+    /// over one changed the setting (the theme flipped as the page scrolled). This hands the wheel to the page instead;
+    /// an open drop-down still scrolls its own list.</summary>
+    public static void LetPageScroll(ComboBox box, ScrollViewer page) =>
+        box.AddHandler(UIElement.PointerWheelChangedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler((_, e) =>
+        {
+            if (box.IsDropDownOpen) return;
+            var delta = e.GetCurrentPoint(box).Properties.MouseWheelDelta;
+            page.ChangeView(null, page.VerticalOffset - delta, null, disableAnimation: true);
+            e.Handled = true;
+        }), handledEventsToo: true);
+
     public static ScrollViewer Page(UIElement content) => new()
     {
         Content = Column(content),

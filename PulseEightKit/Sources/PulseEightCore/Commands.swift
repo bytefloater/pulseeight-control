@@ -7,7 +7,7 @@ import PulseEightKit
 ///
 /// Commands: route, renamePort, setEdid, setBacklight, setStatusLed, retry, reconnect,
 /// saveSettings, removeAdminPassword, setAppearance, setLanguage, strings, setHighlightGrid,
-/// setShowStatusBar, setCheckForUpdates, validatePortName, discover, saveMatrix, removeMatrix, selectMatrix, restart. See `docs/core-interface.md` for the fields of each.
+/// setShowStatusBar, setCheckForUpdates, setUpdatePrereleases, validatePortName, discover, saveMatrix, removeMatrix, selectMatrix, restart. See `docs/core-interface.md` for the fields of each.
 extension AppCore {
     public func handle(requestJSON: String) async -> String {
         guard let data = requestJSON.data(using: .utf8),
@@ -87,6 +87,16 @@ extension AppCore {
                 setHighlightGrid(try bool(object, "on"))
             case "setShowStatusBar":
                 setShowStatusBar(try bool(object, "on"))
+            case "setUpdatePrereleases":
+                // true or false, or null to follow the installed build again.
+                guard let value = object["on"] else { throw CoreError.invalid("Missing true/false (or null) field \"on\"") }
+                if value is NSNull {
+                    setUpdatePrereleases(nil)
+                } else if let on = value as? Bool {
+                    setUpdatePrereleases(on)
+                } else {
+                    throw CoreError.invalid("\"on\" must be true, false or null")
+                }
             case "setCheckForUpdates":
                 setCheckForUpdates(try bool(object, "on"))
             case "discover":

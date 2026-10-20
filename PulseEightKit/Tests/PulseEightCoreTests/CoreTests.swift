@@ -201,7 +201,8 @@ final class MemorySecrets: SecretStore, @unchecked Sendable {
     @Test func snapshotUsesStableNamesAndSharedText() async throws {
         let (core, _, _, _) = try makeCore(host: "10.0.0.5")
         await core.start()
-        #expect(await waitUntil(core) { $0.state?.system != nil })
+        // The system details and the ports load on separate polls, in either order: wait for both.
+        #expect(await waitUntil(core) { $0.state?.system != nil && $0.phase == .connected })
 
         let json = CoreSnapshot(core: core).jsonString()
         let object = try #require(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])

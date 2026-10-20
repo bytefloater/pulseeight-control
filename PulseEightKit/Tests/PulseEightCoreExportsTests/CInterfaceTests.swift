@@ -108,6 +108,26 @@ import PulseEightCoreExports
         #expect(try snapshot(second).settings.checkForUpdates == false, "the choice is remembered")
     }
 
+    @Test func thePreReleaseSettingIsACommandThatCanBeSetCleared_AndPersists() throws {
+        let (first, scratch) = try makeHandle()
+        #expect(try snapshot(first).settings.updatePrereleases == nil, "follows the installed build by default")
+
+        #expect(try call(first, #"{"cmd":"setUpdatePrereleases","on":true}"#)["ok"] as? Bool == true)
+        #expect(try snapshot(first).settings.updatePrereleases == true)
+        #expect(try call(first, #"{"cmd":"setUpdatePrereleases","on":false}"#)["ok"] as? Bool == true)
+        #expect(try snapshot(first).settings.updatePrereleases == false, "an explicit no is not the same as unset")
+        #expect(try call(first, #"{"cmd":"setUpdatePrereleases","on":"yes"}"#)["ok"] as? Bool == false)
+        #expect(try call(first, #"{"cmd":"setUpdatePrereleases"}"#)["ok"] as? Bool == false)
+        p8_destroy(first)
+
+        let second = try #require(p8_create())
+        #expect(try snapshot(second).settings.updatePrereleases == false, "the choice is remembered")
+        #expect(try call(second, #"{"cmd":"setUpdatePrereleases","on":null}"#)["ok"] as? Bool == true)
+        #expect(try snapshot(second).settings.updatePrereleases == nil, "null goes back to following the build")
+        p8_destroy(second)
+        _ = scratch
+    }
+
     @Test func settingsPersistAcrossHandles() throws {
         let (first, scratch) = try makeHandle()
         _ = try call(first, #"{"cmd":"saveSettings","host":"10.9.8.7","port":8080}"#)

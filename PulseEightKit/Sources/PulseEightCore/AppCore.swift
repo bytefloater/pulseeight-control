@@ -438,6 +438,12 @@ public final class AppCore: @unchecked Sendable {
         persist()
     }
 
+    /// `nil` goes back to following the installed build (see `AppSettings.updatePrereleases`).
+    public func setUpdatePrereleases(_ on: Bool?) {
+        mutateSettings { $0.updatePrereleases = on }
+        persist()
+    }
+
     public func setCheckForUpdates(_ on: Bool) {
         mutateSettings { $0.checkForUpdates = on }
         persist()

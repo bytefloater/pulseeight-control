@@ -67,6 +67,9 @@ public struct AppSettings: Codable, Equatable, Sendable {
     /// Whether the app looks for updates by itself. Read by the Windows updater; the macOS app leaves
     /// this to Sparkle, which remembers its own choice.
     public var checkForUpdates = true
+    /// Whether updates may be release candidates and betas, as well as releases. nil (the default) follows the installed build:
+    /// a pre-release build keeps getting pre-releases until the person says otherwise, a release build only releases.
+    public var updatePrereleases: Bool?
 
     public init() {}
 
@@ -92,7 +95,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     /// The property names, except `matrix`: the single matrix older versions kept there is read (see
     /// `init(from:)`) but no longer written.
     enum CodingKeys: String, CodingKey {
-        case matrices, selectedMatrix, matrix, appearance, highlightGrid, showStatusBar, language, checkForUpdates
+        case matrices, selectedMatrix, matrix, appearance, highlightGrid, showStatusBar, language, checkForUpdates, updatePrereleases
     }
 
     /// Each field decodes on its own: a value this version doesn't understand (a newer version's new
@@ -112,6 +115,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         showStatusBar = Self.lenient(c, .showStatusBar) ?? true
         language = Self.lenient(c, .language) ?? Languages.systemSetting
         checkForUpdates = Self.lenient(c, .checkForUpdates) ?? true
+        updatePrereleases = Self.lenient(c, .updatePrereleases)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -123,6 +127,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         try c.encode(showStatusBar, forKey: .showStatusBar)
         try c.encode(language, forKey: .language)
         try c.encode(checkForUpdates, forKey: .checkForUpdates)
+        try c.encodeIfPresent(updatePrereleases, forKey: .updatePrereleases)
     }
 
     private static func lenient<T: Decodable>(_ container: KeyedDecodingContainer<CodingKeys>, _ key: CodingKeys) -> T? {

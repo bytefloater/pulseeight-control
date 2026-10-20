@@ -50,6 +50,7 @@ Request `{"cmd": "...", ...}`; response `{"ok":true}` (plus `"value"` for `valid
 | `setLanguage` | `value`: a code from the snapshot's `languages`, or `system` |
 | `strings` | returns the whole text table for the language in force, a JSON object in `value` (see [localisation](localisation.md)) |
 | `setHighlightGrid`, `setShowStatusBar` | `on`: bool |
+| `setUpdatePrereleases` | `on`: true (offer release candidates and betas too), false (releases only) or null (follow the installed build: a pre-release build keeps getting pre-releases). Both updaters read it from `settings.updatePrereleases`; the app turns it into the feed channels (`rc` and `beta`). |
 | `setCheckForUpdates` | `on`: bool. Whether the app looks for updates by itself. Read by the Windows updater; the macOS app leaves this to Sparkle. |
 | `validatePortName` | `name`; returns the trimmed name in `value` |
 | `discover` | no fields. Asks gotomymatrix.com which matrix is on this network (needs internet). Returns `{"host":"192.168.1.50","port":80}` as text in `value`, or no `value` if it knows of none. Changes no setting: show the answer, then send `saveSettings` if the user accepts it. Only private-network addresses are accepted. |
@@ -64,7 +65,7 @@ if no admin password is saved.
 ```
 schema, phase, phaseDetail?, summary, hostLabel (the selected matrix's name, or its address when it has none), adminConfigured (for the selected matrix),
 language ("en": the language in force), languages [ {code, name} ] (name is in that language),
-settings { appearance, highlightGrid, showStatusBar, checkForUpdates, language ("system" or a code), host?, port, timeout,
+settings { appearance, highlightGrid, showStatusBar, checkForUpdates, updatePrereleases? (true/false; absent = follow the build), language ("system" or a code), host?, port, timeout,
            pollInterval, detailPollInterval }   (host onwards: the selected matrix),
 matrices [ {id, name, displayName, host?, port, timeout, pollInterval, detailPollInterval, adminPasswordSaved, selected} ]
            (every configured matrix, in the order added; the admin password itself is never included),

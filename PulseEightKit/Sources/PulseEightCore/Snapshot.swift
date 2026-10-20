@@ -12,6 +12,8 @@ public struct CoreSnapshot: Codable, Equatable, Sendable {
         public var showStatusBar: Bool
         /// Whether the app looks for updates by itself (the Windows updater reads this).
         public var checkForUpdates: Bool
+        /// Whether updates may be release candidates and betas; nil follows the installed build (see `AppSettings`).
+        public var updatePrereleases: Bool?
         /// The saved choice: a language code, or "system".
         public var language: String
         public var host: String?
@@ -172,6 +174,7 @@ extension CoreSnapshot {
                 highlightGrid: update.settings.highlightGrid,
                 showStatusBar: update.settings.showStatusBar,
                 checkForUpdates: update.settings.checkForUpdates,
+                updatePrereleases: update.settings.updatePrereleases,
                 language: update.settings.language,
                 host: matrix.host,
                 port: matrix.port,

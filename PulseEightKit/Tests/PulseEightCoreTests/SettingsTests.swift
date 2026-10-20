@@ -21,6 +21,32 @@ private func scratchFile(_ name: String = "settings.json") throws -> (url: URL, 
         #expect(AppSettings.load(from: url).checkForUpdates == false)
     }
 
+    @Test func theSettingsFilePreReleaseChoiceIsUnsetByDefaultAndSurvivesARoundTrip() throws {
+        let (url, cleanup) = try scratchFile()
+        defer { cleanup() }
+        #expect(AppSettings().updatePrereleases == nil)
+
+        for choice: Bool? in [true, false, nil] {
+            var settings = AppSettings()
+            settings.updatePrereleases = choice
+            try settings.save(to: url)
+            #expect(AppSettings.load(from: url).updatePrereleases == choice)
+        }
+        // Unset is not written at all, so an older version reading the file sees nothing new.
+        try AppSettings().save(to: url)
+        #expect(!(try String(contentsOf: url, encoding: .utf8)).contains("updatePrereleases"))
+    }
+
+    @Test func aBadPreReleaseValueFallsBackToUnsetWithoutLosingTheRest() throws {
+        let (url, cleanup) = try scratchFile()
+        defer { cleanup() }
+        try Data(#"{"matrix":{"host":"10.0.0.9"},"updatePrereleases":"maybe","appearance":"dark"}"#.utf8).write(to: url)
+        let settings = AppSettings.load(from: url)
+        #expect(settings.updatePrereleases == nil)
+        #expect(settings.matrix.host == "10.0.0.9")
+        #expect(settings.appearance == .dark)
+    }
+
     @Test func aSettingsFileFromBeforeUpdatesExistedStillLoadsWithChecksOn() throws {
         let (url, cleanup) = try scratchFile()
         defer { cleanup() }

@@ -14,6 +14,7 @@ public sealed class MiniServer : IDisposable
     private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
     private readonly CancellationTokenSource _stop = new();
     private readonly ConcurrentDictionary<string, byte[]> _files = new();
+    private readonly ConcurrentDictionary<string, string> _redirects = new();
     private int _requests;
 
     public MiniServer()
@@ -27,6 +28,9 @@ public sealed class MiniServer : IDisposable
 
     public void Serve(string path, byte[] content) => _files[path] = content;
     public void Serve(string path, string content) => Serve(path, Encoding.UTF8.GetBytes(content));
+    /// <summary>Answers a GET of <paramref name="path"/> with a 302 to <paramref name="target"/> (a path on this server), as
+    /// GitHub does for a release download.</summary>
+    public void Redirect(string path, string target) => _redirects[path] = target;
     public void Remove(string path) => _files.TryRemove(path, out _);
 
     private async Task AcceptLoop()
@@ -54,6 +58,12 @@ public sealed class MiniServer : IDisposable
                 path = path.Split('?')[0];
                 Interlocked.Increment(ref _requests);
 
+                if (_redirects.TryGetValue(path, out var target))
+                {
+                    await stream.WriteAsync(Encoding.ASCII.GetBytes(
+                        $"HTTP/1.1 302 Found\r\nLocation: {BaseUrl}{target}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"));
+                    return;
+                }
                 var found = _files.TryGetValue(path, out var body);
                 var head = Encoding.ASCII.GetBytes(
                     $"HTTP/1.1 {(found ? "200 OK" : "404 Not Found")}\r\nContent-Length: {(found ? body!.Length : 0)}\r\nConnection: close\r\n\r\n");
@@ -83,7 +93,7 @@ public sealed class TestKey
 
 public sealed record ReleaseSpec(
     string Version, string Short, byte[] Installer, string? Os = null, string? Notes = null, string? SignedWith = null,
-    string? Channel = null)
+    string? Channel = null, bool ViaRedirect = false)
 {
     /// <summary>NetSparkle only offers items for the OS it runs on, and these tests run on whatever OS builds them,
     /// so "this platform's" release is marked with the host's own name (in production that is always windows).</summary>
@@ -107,7 +117,14 @@ public sealed class FeedFixture : IDisposable
         foreach (var release in releases)
         {
             var file = $"/PulseEightControl-{release.Short}-setup.exe";
-            Server.Serve(file, release.Installer);
+            if (release.ViaRedirect)
+            {
+                // Like a GitHub release download: the address in the feed redirects to an asset whose own name is a bare id.
+                var asset = $"/assets/{Guid.NewGuid()}";
+                Server.Serve(asset, release.Installer);
+                Server.Redirect(file, asset);
+            }
+            else Server.Serve(file, release.Installer);
             var signature = release.SignedWith ?? Key.Sign(release.Installer);
             var os = $" sparkle:os=\"{release.Os ?? ReleaseSpec.HostOs}\"";
             var notes = release.Notes is null ? "" : $"<description><![CDATA[{release.Notes}]]></description>";

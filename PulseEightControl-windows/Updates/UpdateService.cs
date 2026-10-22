@@ -27,6 +27,9 @@ public sealed class UpdateService : IUpdateService
 
     public event Action? ExitRequested;
 
+    /// <summary>Where the verified installer is, once downloaded.</summary>
+    public string? DownloadedPath => _downloadedPath;
+
     /// <inheritdoc />
     public bool IncludePrereleases { get; set; }
 
@@ -117,7 +120,7 @@ public sealed class UpdateService : IUpdateService
         {
             using var registration = cancellation.Register(() => _sparkle.CancelFileDownload());
             await _sparkle.InitAndBeginDownload(offer.Item).ConfigureAwait(false);
-            _downloadedPath = await task.Task.ConfigureAwait(false);
+            _downloadedPath = InstallerNamed(await task.Task.ConfigureAwait(false), offer);
         }
         finally
         {
@@ -132,6 +135,7 @@ public sealed class UpdateService : IUpdateService
     public async Task InstallAsync(UpdateOffer offer)
     {
         var path = _downloadedPath ?? await _sparkle.GetDownloadPathForAppCastItem(offer.Item).ConfigureAwait(false);
+        if (path != null && File.Exists(path)) path = InstallerNamed(path, offer);
         if (path == null || !File.Exists(path)) throw new UpdateException("The update hasn't been downloaded.");
         await _sparkle.InstallUpdate(offer.Item, path).ConfigureAwait(false);
     }
@@ -139,6 +143,36 @@ public sealed class UpdateService : IUpdateService
     public void Skip(UpdateOffer offer) => _sparkle.Configuration.SetVersionToSkip(offer.Version);
 
     public void Dispose() => _sparkle.Dispose();
+
+    /// <summary>
+    /// Gives the downloaded installer the file name the feed's address ends in ("...-Setup-0.2.0-x64.exe"), and returns where it is.
+    /// GitHub answers a release download with a redirect to an asset whose own name is a bare id, and NetSparkle names the
+    /// file from where it ended up: no extension at all. NetSparkle decides how to run a file by its extension, so without
+    /// ".exe" the update is "installed" by running nothing, the app closes, and the old version starts again.
+    /// </summary>
+    private static string InstallerNamed(string path, UpdateOffer offer)
+    {
+        var wanted = WantedFileName(offer);
+        if (wanted == null || string.Equals(Path.GetFileName(path), wanted, StringComparison.OrdinalIgnoreCase)) return path;
+
+        var target = Path.Combine(Path.GetDirectoryName(path)!, wanted);
+        File.Move(path, target, overwrite: true);
+        return target;
+    }
+
+    /// <summary>The last part of the feed's download address if it is a runnable installer, else a name made from the version.</summary>
+    private static string? WantedFileName(UpdateOffer offer)
+    {
+        string? name = null;
+        if (Uri.TryCreate(offer.Item.DownloadLink, UriKind.Absolute, out var link))
+            name = Uri.UnescapeDataString(Path.GetFileName(link.LocalPath));
+        if (!string.IsNullOrEmpty(name) && name.IndexOfAny(Path.GetInvalidFileNameChars()) < 0 &&
+            RunnableExtensions.Contains(Path.GetExtension(name), StringComparer.OrdinalIgnoreCase))
+            return name;
+        return null;
+    }
+
+    private static readonly string[] RunnableExtensions = [".exe", ".msi", ".msix"];
 
     private static UpdateOffer ToOffer(AppCastItem item) => new(
         item.Version ?? string.Empty,

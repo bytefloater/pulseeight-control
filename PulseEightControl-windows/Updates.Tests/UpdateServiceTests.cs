@@ -161,6 +161,22 @@ public sealed class DownloadingTests : IDisposable
         lock (reports) Assert.NotEmpty(reports);
     }
 
+    /// <summary>GitHub answers a release download with a redirect to an asset named by a bare id. The installer must still end
+    /// up as a ".exe", because NetSparkle decides how to run a file by its extension; a file without one is never run.</summary>
+    [Fact]
+    public async Task ADownloadThatWasRedirectedStillEndsUpAsAnExecutable()
+    {
+        var (service, offer) = await OfferAsync(new ReleaseSpec("0.2.0.5", "0.2.0", Installer, ViaRedirect: true));
+        using var _ = service;
+
+        await service.DownloadAsync(offer);
+
+        var path = Assert.IsType<string>(service.DownloadedPath);
+        Assert.Equal(".exe", Path.GetExtension(path));
+        Assert.Equal("PulseEightControl-0.2.0-setup.exe", Path.GetFileName(path));
+        Assert.Equal(Installer, await File.ReadAllBytesAsync(path));
+    }
+
     [Fact]
     public async Task ADownloadThatDoesNotMatchItsSignatureIsRefused()
     {
